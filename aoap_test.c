@@ -21,8 +21,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include <sys/types.h>
-#include "libusb/libusb.h"
+//#include "libusb/libusb.h"
+#include <libusb-1.0/libusb.h>
 
 //-----------------------------------------------------------------------------
 #define ACCESSORY_GET_PROTOCOL          51
@@ -107,7 +109,7 @@ int main(void)
 	print_devs(devs);
 	libusb_free_device_list(devs, 1);
 
-  dev_handle = libusb_open_device_with_vid_pid(NULL, 0x22b8, 0x2e63);
+  dev_handle = libusb_open_device_with_vid_pid(NULL, 0x18d1, 0x4ee2);
   if(dev_handle == NULL)
   {
     fprintf(stderr,"Cannot open USB device.\n");
