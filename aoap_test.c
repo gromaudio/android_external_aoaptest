@@ -1,27 +1,18 @@
 /*
- * libusb example program to list devices on the bus
- * Copyright (C) 2007 Daniel Drake <dsd@gentoo.org>
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- */
+* Android accessory protocol tester.
+*
+* This program can be used and distributed without restrictions.
+*
+* Authors: Ivan Zaitsev
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <getopt.h>
 #include <unistd.h>
+#include <stdint.h>
 #include <sys/types.h>
 //#include "libusb/libusb.h"
 #include <libusb-1.0/libusb.h>
@@ -88,15 +79,86 @@ void aoap_send_string( libusb_device_handle *dev_handle,
   }
 }
 
+//--------------------------------------------------------------------------
+static void usage(FILE * fp, int argc, char ** argv)
+{
+  fprintf( fp,
+           "Usage: %s [options]\n\n"
+           "Options:\n"
+           "-v | --vid Device VID [18d1]\n"
+           "-p | --pid Device PID [4ee2]\n"
+           "-h | --help Print this message\n"
+           "-l | --list List available devices\n"
+           "",
+           argv[0] );
+}
+
+//--------------------------------------------------------------------------
+static const char short_options[] = "v:p:hl";
+static const struct option long_options[] =
+{
+  { "vid",  required_argument, NULL, 'v' },
+  { "pid",  required_argument, NULL, 'p' },
+  { "help",       no_argument, NULL, 'h' },
+  { "list",       no_argument, NULL, 'l' },
+  { 0, 0, 0, 0 }
+};
+
 //-----------------------------------------------------------------------------
-int main(void)
+int main(int argc, char ** argv)
 {
 	libusb_device        **devs;
   libusb_device_handle *dev_handle;
 	int                   r,
                         active_congif;
 	ssize_t               cnt;
+  uint16_t              VID,
+                        PID;
+  char                  bListOnly;
   unsigned char         buff[64];
+
+  VID = 0x18d1;
+  PID = 0x4ee2;
+  bListOnly = 0;
+  dev_handle= 0;
+
+  for(;;)
+  {
+    int index;
+    int c;
+
+    c = getopt_long(argc, argv, short_options, long_options, &index);
+    if(-1 == c)
+      break;
+
+    switch(c)
+    {
+      case 0:
+        break;
+
+      case 'v':
+        VID = strtol(optarg, NULL, 16);
+        break;
+
+      case 'p':
+        PID = strtol(optarg, NULL, 16);
+        break;
+
+      case 'h':
+        usage(stdout, argc, argv);
+        exit( EXIT_SUCCESS );
+        break;
+
+      case 'l':
+        bListOnly = 1;
+        break;
+
+      default:
+        usage(stderr, argc, argv);
+        exit(EXIT_FAILURE);
+        break;
+    }
+  }
 
 	r = libusb_init(NULL);
 	if (r < 0)
@@ -109,7 +171,11 @@ int main(void)
 	print_devs(devs);
 	libusb_free_device_list(devs, 1);
 
-  dev_handle = libusb_open_device_with_vid_pid(NULL, 0x18d1, 0x4ee2);
+  if(bListOnly)
+    goto exit;
+
+  fprintf(stderr,"Trying to open device %04x:%04x.\n", VID, PID);
+  dev_handle = libusb_open_device_with_vid_pid(NULL, VID, PID);
   if(dev_handle == NULL)
   {
     fprintf(stderr,"Cannot open USB device.\n");
@@ -231,7 +297,7 @@ int main(void)
   }
 
 
-  
+
 
 exit:
   if(dev_handle)
