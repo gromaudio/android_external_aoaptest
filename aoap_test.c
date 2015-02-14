@@ -107,7 +107,7 @@ int main(void)
 	print_devs(devs);
 	libusb_free_device_list(devs, 1);
 
-  dev_handle = libusb_open_device_with_vid_pid(NULL, 0x18d1, 0x4ee2);
+  dev_handle = libusb_open_device_with_vid_pid(NULL, 0x22b8, 0x2e63);
   if(dev_handle == NULL)
   {
     fprintf(stderr,"Cannot open USB device.\n");
@@ -204,6 +204,32 @@ int main(void)
   }
 
   fprintf(stderr,"Active configuration: %d\n", active_congif);
+
+/*
+  r = libusb_detach_kernel_driver(dev_handle, 2);
+  if(r < 0)
+  {
+    fprintf(stderr,"Detach kernel driver error: %d %s\n", r, libusb_error_name(r));
+    goto exit;
+  }
+*/
+
+  r = libusb_claim_interface(dev_handle, 2);
+  if(r < 0)
+  {
+    fprintf(stderr,"Claim interface error: %d %s\n", r, libusb_error_name(r));
+    goto exit;
+  }
+
+  r = libusb_set_interface_alt_setting(dev_handle, 2, 1);
+  if(r < 0)
+  {
+    fprintf(stderr,"Set interface alt settings error: %d %s\n", r, libusb_error_name(r));
+    goto exit;
+  }
+
+
+  
 
 exit:
   if(dev_handle)
