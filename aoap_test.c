@@ -14,8 +14,11 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/types.h>
-//#include "libusb/libusb.h"
-#include <libusb-1.0/libusb.h>
+#if defined(__ANDROID__) || defined(ANDROID)
+  #include "libusb/libusb.h"
+#else
+  #include <libusb-1.0/libusb.h>
+#endif
 
 //-----------------------------------------------------------------------------
 #define ACCESSORY_GET_PROTOCOL          51
