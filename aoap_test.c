@@ -92,18 +92,22 @@ static void usage(FILE * fp, int argc, char ** argv)
            "-p | --pid Device PID [4ee2]\n"
            "-h | --help Print this message\n"
            "-l | --list List available devices\n"
+           "-r | --reset Perform port reset after activating accessory\n"
+           "-s | --stream Start audio streaming after activating accessory\n"
            "",
            argv[0] );
 }
 
 //--------------------------------------------------------------------------
-static const char short_options[] = "v:p:hl";
+static const char short_options[] = "v:p:hlr";
 static const struct option long_options[] =
 {
   { "vid",  required_argument, NULL, 'v' },
   { "pid",  required_argument, NULL, 'p' },
   { "help",       no_argument, NULL, 'h' },
   { "list",       no_argument, NULL, 'l' },
+  { "reset",      no_argument, NULL, 'r' },
+  { "stream",     no_argument, NULL, 's' },
   { 0, 0, 0, 0 }
 };
 
@@ -117,12 +121,16 @@ int main(int argc, char ** argv)
 	ssize_t               cnt;
   uint16_t              VID,
                         PID;
-  char                  bListOnly;
+  char                  bListOnly,
+                        bReset,
+                        bStream;
   unsigned char         buff[64];
 
   VID = 0x18d1;
   PID = 0x4ee2;
   bListOnly = 0;
+  bReset    = 0;
+  bStream   = 0;
   dev_handle= 0;
 
   for(;;)
@@ -154,6 +162,14 @@ int main(int argc, char ** argv)
 
       case 'l':
         bListOnly = 1;
+        break;
+
+      case 'r':
+        bReset = 1;
+        break;
+
+      case 's':
+        bStream = 1;
         break;
 
       default:
@@ -244,10 +260,21 @@ int main(int argc, char ** argv)
     fprintf(stderr,"AOAP start error: %d %s\n", r, libusb_error_name(r));
     goto exit;
   }
+
+  if(bReset)
+  {
+    r = libusb_reset_device(dev_handle);
+    if(r < 0)
+      fprintf(stderr,"Device reset error: %d %s\n", r, libusb_error_name(r));
+  }
+
   libusb_close(dev_handle);
   libusb_exit(NULL);
 
-  sleep(5);
+  if(!bStream)
+    exit( EXIT_SUCCESS );
+
+  sleep(3);
 
   r = libusb_init(NULL);
   if (r < 0)
