@@ -38,6 +38,15 @@
 #define ACCESSORY_STRING_SERIAL         "0000000012345678"
 
 //-----------------------------------------------------------------------------
+const char* libusb_error_name(int errcode);
+
+//-----------------------------------------------------------------------------
+void iso_transfer_cb(struct libusb_transfer *transfer)
+{
+  fprintf(stderr,"ISO completted: %d\n", transfer->status);
+}
+
+//-----------------------------------------------------------------------------
 static void print_devs(libusb_device **devs)
 {
 	libusb_device *dev;
@@ -55,6 +64,16 @@ static void print_devs(libusb_device **devs)
 			desc.idVendor, desc.idProduct,
 			libusb_get_bus_number(dev), libusb_get_device_address(dev));
 	}
+}
+
+//-----------------------------------------------------------------------------
+static void enumerate_usb_devs(void)
+{
+  libusb_device **devs;
+
+  libusb_get_device_list(NULL, &devs);
+  print_devs(devs);
+  libusb_free_device_list(devs, 1);
 }
 
 //-----------------------------------------------------------------------------
@@ -99,7 +118,7 @@ static void usage(FILE * fp, int argc, char ** argv)
 }
 
 //--------------------------------------------------------------------------
-static const char short_options[] = "v:p:hlr";
+static const char short_options[] = "v:p:hlrs";
 static const struct option long_options[] =
 {
   { "vid",  required_argument, NULL, 'v' },
@@ -114,7 +133,6 @@ static const struct option long_options[] =
 //-----------------------------------------------------------------------------
 int main(int argc, char ** argv)
 {
-	libusb_device        **devs;
   libusb_device_handle *dev_handle;
 	int                   r,
                         active_congif;
@@ -183,12 +201,7 @@ int main(int argc, char ** argv)
 	if (r < 0)
 		return r;
 
-	cnt = libusb_get_device_list(NULL, &devs);
-	if (cnt < 0)
-		return (int) cnt;
-
-	print_devs(devs);
-	libusb_free_device_list(devs, 1);
+	enumerate_usb_devs();
 
   if(bListOnly)
     goto exit;
@@ -280,12 +293,7 @@ int main(int argc, char ** argv)
   if (r < 0)
     return r;
 
-  cnt = libusb_get_device_list(NULL, &devs);
-  if (cnt < 0)
-    return (int) cnt;
-
-  print_devs(devs);
-  libusb_free_device_list(devs, 1);
+  enumerate_usb_devs();
 
   dev_handle = libusb_open_device_with_vid_pid(NULL, 0x18d1, 0x2d05);
   if(dev_handle == NULL)
@@ -303,14 +311,12 @@ int main(int argc, char ** argv)
 
   fprintf(stderr,"Active configuration: %d\n", active_congif);
 
-/*
   r = libusb_detach_kernel_driver(dev_handle, 2);
   if(r < 0)
   {
     fprintf(stderr,"Detach kernel driver error: %d %s\n", r, libusb_error_name(r));
     goto exit;
   }
-*/
 
   r = libusb_claim_interface(dev_handle, 2);
   if(r < 0)
@@ -327,12 +333,59 @@ int main(int argc, char ** argv)
   }
 
 
+{
+struct libusb_transfer *iso_transfer;
+unsigned char iso_buffer[1024];
+int iMaxPacketSize;
+
+
+iMaxPacketSize = libusb_get_max_iso_packet_size(libusb_get_device(dev_handle), 0x82);
+if(iMaxPacketSize < 0)
+{
+  fprintf(stderr,"Get ISO max packet size error: %d %s\n", iMaxPacketSize, libusb_error_name(iMaxPacketSize));
+  goto exit;
+}
+fprintf(stderr,"ISO max packet size: %d\n", iMaxPacketSize);
+
+iso_transfer = libusb_alloc_transfer(8);
+if(iso_transfer == 0)
+{
+  fprintf(stderr,"Allocating libusb_transfer error\n");
+  goto exit;
+}
+
+libusb_set_iso_packet_lengths(iso_transfer, iMaxPacketSize);
+
+libusb_fill_iso_transfer(iso_transfer,
+                         dev_handle,
+                         0x82,
+                         iso_buffer,
+                         sizeof(iso_buffer),
+                         4,
+                         iso_transfer_cb,
+                         0,
+                         1000);
+
+r = libusb_submit_transfer(iso_transfer);
+if(r < 0)
+{
+  fprintf(stderr,"Submit transfer error: %d %s\n", r, libusb_error_name(r));
+  goto exit;
+}
+
+sleep(2);
+
+libusb_free_transfer(iso_transfer);
+}
 
 
 exit:
+fprintf(stderr,"111\n");
   if(dev_handle)
     libusb_close(dev_handle);
+fprintf(stderr,"222\n");
 	libusb_exit(NULL);
+fprintf(stderr,"333\n");
 	return 0;
 }
 
