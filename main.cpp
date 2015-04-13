@@ -50,42 +50,20 @@ typedef struct libusb_interface_descriptor libusb_interface_descriptor;
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
 
 //-----------------------------------------------------------------------------
-uint8_t bCompleted;
 const uint16_t aSupportedPIDs[] = { 0x2d02, 0x2d03, 0x2d04, 0x2d05 };
-static sp<AoapStream> aoapstream;
+
 //-----------------------------------------------------------------------------
 extern "C" {
 const char* libusb_error_name(int errcode);
 }
-/*
-//-----------------------------------------------------------------------------
-void iso_transfer_cb(struct libusb_transfer *xfr)
-{
-  int i, data_size;
 
-  if(xfr->type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS)
-  {
-    data_size = 0;
-    for(i = 0; i < xfr->num_iso_packets; i++)
-    {
-      struct libusb_iso_packet_descriptor *pack = &xfr->iso_packet_desc[i];
-      data_size += pack->actual_length;
-//      printf("pack%u status:%d, length:%u, actual_length:%u\n", i, pack->status, pack->length, pack->actual_length);
-    }
-//    fprintf(stderr,"ISO completted: %d, %d\n", (int)xfr->user_data, data_size);
-  }
-
-  libusb_submit_transfer(xfr);
-  bCompleted = 1;
-}
-*/
 //-----------------------------------------------------------------------------
 static void print_devs(libusb_device **devs)
 {
   libusb_device *dev;
-  int i = 0;
+  int32_t i = 0;
 
-  while ((dev = devs[i++]) != NULL) {
+  while((dev = devs[i++]) != NULL) {
     struct libusb_device_descriptor desc;
     int r = libusb_get_device_descriptor(dev, &desc);
     if (r < 0) {
@@ -111,12 +89,12 @@ static void enumerate_usb_devs(void)
 }
 
 //-----------------------------------------------------------------------------
-void aoap_send_string( libusb_device_handle *dev_handle, 
-                      unsigned char strIndex, 
+void aoap_send_string(libusb_device_handle *dev_handle,
+                      uint8_t strIndex,
                       const char *str,
-                      unsigned char strLen)
+                      uint8_t strLen)
 {
-  int r;
+  int32_t r;
 
   r = libusb_control_transfer(dev_handle,
                               LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
@@ -258,208 +236,12 @@ acc_exit:
   libusb_exit(NULL);
   return exit_code;
 }
-/*
-//--------------------------------------------------------------------------
-void start_streaming(libusb_device_handle *dev_handle, unsigned char iso_ep)
-{
-  struct libusb_transfer *iso_transfer_1,
-                         *iso_transfer_2;
-  unsigned char iso_buffer_1[4096];
-  unsigned char iso_buffer_2[4096];
-  int r, iMaxPacketSize;
-
-
-  iMaxPacketSize = libusb_get_max_iso_packet_size(libusb_get_device(dev_handle), iso_ep);
-  if(iMaxPacketSize < 0)
-  {
-    fprintf(stderr,"Get ISO max packet size error: %d %s\n", iMaxPacketSize, libusb_error_name(iMaxPacketSize));
-    return;
-  }
-  fprintf(stderr,"ISO max packet size: %d\n", iMaxPacketSize);
-
-  iso_transfer_1 = libusb_alloc_transfer(NUM_ISO_PACK);
-  iso_transfer_2 = libusb_alloc_transfer(NUM_ISO_PACK);
-  if(!iso_transfer_1 || !iso_transfer_2)
-  {
-    fprintf(stderr,"Allocating libusb_transfer error\n");
-    return;
-  }
-
-  libusb_fill_iso_transfer(iso_transfer_1,
-                           dev_handle,
-                           iso_ep,
-                           iso_buffer_1,
-                           sizeof(iso_buffer_1),
-                           NUM_ISO_PACK,
-                           iso_transfer_cb,
-                           (void*)1,
-                           0);
-  libusb_fill_iso_transfer(iso_transfer_2,
-                           dev_handle,
-                           iso_ep,
-                           iso_buffer_2,
-                           sizeof(iso_buffer_2),
-                           NUM_ISO_PACK,
-                           iso_transfer_cb,
-                           (void*)2,
-                           0);
-
-  libusb_set_iso_packet_lengths(iso_transfer_1, iMaxPacketSize);
-  libusb_set_iso_packet_lengths(iso_transfer_2, iMaxPacketSize);
-
-  r = libusb_submit_transfer(iso_transfer_1);
-  if(r < 0)
-  {
-    fprintf(stderr,"Submit transfer 1 error: %d %s\n", r, libusb_error_name(r));
-    return;
-  }
-  r = libusb_submit_transfer(iso_transfer_2);
-  if(r < 0)
-  {
-    fprintf(stderr,"Submit transfer 2 error: %d %s\n", r, libusb_error_name(r));
-    return;
-  }
-
-  while(1)
-  {
-    r = libusb_handle_events(NULL);
-    if(r != LIBUSB_SUCCESS)
-    {
-      fprintf(stderr,"Handle event error: %d %s\n", r, libusb_error_name(r));
-      libusb_cancel_transfer(iso_transfer_1);
-      libusb_cancel_transfer(iso_transfer_2);
-      break;
-    }
-  }
-
-  libusb_free_transfer(iso_transfer_1);
-  libusb_free_transfer(iso_transfer_2);
-}
-*/
-/*
-//--------------------------------------------------------------------------
-int find_streaming_interface(libusb_device_handle *dev_handle, libusb_interface_descriptor *interface_desc)
-{
-  int           r,
-                interface_idx,
-                alt_idx;
-  unsigned char res;
-  struct libusb_config_descriptor *config_desc;
-
-  res = 0;
-  r = libusb_get_active_config_descriptor(libusb_get_device(dev_handle), &config_desc);
-  if(r < 0)
-  {
-    fprintf(stderr,"Get active configuration descriptor error: %d %s\n", r, libusb_error_name(r));
-    return 0;
-  }
-
-  for(interface_idx= 0; interface_idx< config_desc->bNumInterfaces; interface_idx++)
-    for(alt_idx= 0; alt_idx< config_desc->interface[interface_idx].num_altsetting; alt_idx++)
-    {
-      memcpy(interface_desc,
-             &config_desc->interface[interface_idx].altsetting[alt_idx],
-             sizeof(libusb_interface_descriptor));
-
-      fprintf(stderr,"Int %d, Alt %d, EPs %d, Class %d, SubClass %d\n", interface_desc->bInterfaceNumber,
-                                                                        interface_desc->bAlternateSetting,
-                                                                        interface_desc->bNumEndpoints,
-                                                                        interface_desc->bInterfaceClass,
-                                                                        interface_desc->bInterfaceSubClass );
-      if(interface_desc->bInterfaceClass == LIBUSB_CLASS_AUDIO &&
-         interface_desc->bInterfaceSubClass == 2 &&
-         interface_desc->bNumEndpoints != 0)
-      {
-        libusb_free_config_descriptor(config_desc);
-        return 0;
-      }
-    }
-  libusb_free_config_descriptor(config_desc);
-  return -1;
-}
-*/
-/*
-//--------------------------------------------------------------------------
-void activate_streaming(void)
-{
-  libusb_device_handle              *dev_handle;
-  int                                r,
-                                     active_congif;
-  struct libusb_interface_descriptor interface_desc;
-  unsigned char i;
-
-  r = libusb_init(NULL);
-  if(r < 0)
-    return;
-
-  enumerate_usb_devs();
-
-  for(i = 0; i < ARRAY_SIZE(aSupportedPIDs); i++)
-  {
-    dev_handle = libusb_open_device_with_vid_pid(NULL, AOAP_VID, aSupportedPIDs[ i ]);
-    if(dev_handle != NULL)
-      break;
-  }
-  if(dev_handle == NULL)
-  {
-    fprintf(stderr,"Cannot open USB device.\n");
-    goto stream_exit;
-  }
-
-  r = libusb_get_configuration(dev_handle, &active_congif);
-  if(r < 0)
-  {
-    fprintf(stderr,"Get active configuration error: %d %s\n", r, libusb_error_name(r));
-    goto stream_exit;
-  }
-
-  fprintf(stderr,"Active configuration: %d\n", active_congif);
-
-  if(find_streaming_interface(dev_handle, &interface_desc))
-  {
-    fprintf(stderr,"Cannot find streaming interface.\n");
-    goto stream_exit;
-  }
-  fprintf(stderr,"Streaming interface %d, endpoint 0x%02X\n", interface_desc.bInterfaceNumber,
-                                                              interface_desc.endpoint->bEndpointAddress);
-
-  libusb_detach_kernel_driver(dev_handle, interface_desc.bInterfaceNumber);
-
-  r = libusb_claim_interface(dev_handle, interface_desc.bInterfaceNumber);
-  if(r < 0)
-  {
-    fprintf(stderr,"Claim interface error: %d %s\n", r, libusb_error_name(r));
-    goto stream_exit;
-  }
-
-  r = libusb_set_interface_alt_setting(dev_handle, interface_desc.bInterfaceNumber, interface_desc.bAlternateSetting);
-  if(r < 0)
-  {
-    fprintf(stderr,"Set interface alt settings error: %d %s\n", r, libusb_error_name(r));
-    goto stream_exit;
-  }
-
-  start_streaming(dev_handle, interface_desc.endpoint->bEndpointAddress);
-
-  r = libusb_release_interface(dev_handle, interface_desc.bInterfaceNumber);
-  if(r < 0)
-  {
-    fprintf(stderr,"Release interface error: %d %s\n", r, libusb_error_name(r));
-  }
-
-stream_exit:
-  libusb_close(dev_handle);
-  libusb_exit(NULL);
-  return;
-}
-*/
 
 //--------------------------------------------------------------------------
 void start_streaming(void)
 {
   int ch;
-
-  aoapstream = new AoapStream();
+  sp<AoapStream> aoapstream = new AoapStream();
 
   for(;;)
   {
