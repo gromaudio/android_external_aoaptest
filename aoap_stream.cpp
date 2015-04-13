@@ -22,16 +22,23 @@ AoapStream::AoapStream()
 }
 
 //--------------------------------------------------------------------------
+AoapStream::~AoapStream()
+{
+  stopStreaming();
+  closeStreamingDevice();
+}
+
+//--------------------------------------------------------------------------
 status_t AoapStream::readyToRun()
 {
+  openStreamingDevice();
+  startStreaming();
   return NO_ERROR;
 }
 
 //--------------------------------------------------------------------------
 void AoapStream::onFirstRef()
 {
-  mStreamingActive = false;
-  openStreamingDevice();
   run("AoapStream", PRIORITY_URGENT_DISPLAY);
 }
 
@@ -146,7 +153,7 @@ void AoapStream::closeStreamingDevice()
 }
 
 //-----------------------------------------------------------------------------
-void iso_transfer_cb(struct libusb_transfer *xfr)
+void AoapStream::iso_transfer_cb(struct libusb_transfer *xfr)
 {
   int i, data_size;
 
@@ -159,7 +166,7 @@ void iso_transfer_cb(struct libusb_transfer *xfr)
       data_size += pack->actual_length;
 //      printf("pack%u status:%d, length:%u, actual_length:%u\n", i, pack->status, pack->length, pack->actual_length);
     }
-//    fprintf(stderr,"ISO completted: %d, %d\n", (int)xfr->user_data, data_size);
+    fprintf(stderr,"ISO completted: %d, %d\n", (int)xfr->user_data, data_size);
   }
 
   libusb_submit_transfer(xfr);
@@ -170,9 +177,9 @@ void iso_transfer_cb(struct libusb_transfer *xfr)
 void AoapStream::startStreaming()
 {
   int r, iMaxPacketSize;
-  unsigned char iso_ep = mInterfaceDesc.endpoint->bEndpointAddress;
+  unsigned char iIsoEpNumAddr = mInterfaceDesc.endpoint->bEndpointAddress;
 
-  iMaxPacketSize = libusb_get_max_iso_packet_size(libusb_get_device(mDevHandle), iso_ep);
+  iMaxPacketSize = libusb_get_max_iso_packet_size(libusb_get_device(mDevHandle), iIsoEpNumAddr);
   if(iMaxPacketSize < 0)
   {
     fprintf(stderr,"Get ISO max packet size error: %d %s\n", iMaxPacketSize, libusb_error_name(iMaxPacketSize));
@@ -180,58 +187,57 @@ void AoapStream::startStreaming()
   }
   fprintf(stderr,"ISO max packet size: %d\n", iMaxPacketSize);
 
-  iso_transfer_1 = libusb_alloc_transfer(NUM_ISO_PACK);
-  iso_transfer_2 = libusb_alloc_transfer(NUM_ISO_PACK);
-  if(!iso_transfer_1 || !iso_transfer_2)
+  mIsoTransfer_1 = libusb_alloc_transfer(NUM_ISO_PACK);
+  mIsoTransfer_2 = libusb_alloc_transfer(NUM_ISO_PACK);
+  if(!mIsoTransfer_1 || !mIsoTransfer_2)
   {
     fprintf(stderr,"Allocating libusb_transfer error\n");
     return;
   }
 
-  libusb_fill_iso_transfer(iso_transfer_1,
+  libusb_fill_iso_transfer(mIsoTransfer_1,
                            mDevHandle,
-                           iso_ep,
-                           iso_buffer_1,
-                           sizeof(iso_buffer_1),
+                           iIsoEpNumAddr,
+                           mIsoBuffer_1,
+                           sizeof(mIsoBuffer_1),
                            NUM_ISO_PACK,
                            iso_transfer_cb,
                            (void*)1,
                            0);
-  libusb_fill_iso_transfer(iso_transfer_2,
+  libusb_fill_iso_transfer(mIsoTransfer_2,
                            mDevHandle,
-                           iso_ep,
-                           iso_buffer_2,
-                           sizeof(iso_buffer_2),
+                           iIsoEpNumAddr,
+                           mIsoBuffer_2,
+                           sizeof(mIsoBuffer_2),
                            NUM_ISO_PACK,
                            iso_transfer_cb,
                            (void*)2,
                            0);
 
-  libusb_set_iso_packet_lengths(iso_transfer_1, iMaxPacketSize);
-  libusb_set_iso_packet_lengths(iso_transfer_2, iMaxPacketSize);
+  libusb_set_iso_packet_lengths(mIsoTransfer_1, iMaxPacketSize);
+  libusb_set_iso_packet_lengths(mIsoTransfer_2, iMaxPacketSize);
 
-  r = libusb_submit_transfer(iso_transfer_1);
+  r = libusb_submit_transfer(mIsoTransfer_1);
   if(r < 0)
   {
     fprintf(stderr,"Submit transfer 1 error: %d %s\n", r, libusb_error_name(r));
     return;
   }
-  r = libusb_submit_transfer(iso_transfer_2);
+  r = libusb_submit_transfer(mIsoTransfer_2);
   if(r < 0)
   {
     fprintf(stderr,"Submit transfer 2 error: %d %s\n", r, libusb_error_name(r));
     return;
   }
-
-  mStreamingActive = true;
 }
 
 //--------------------------------------------------------------------------
 void AoapStream::stopStreaming()
 {
-  mStreamingActive = false;
-  libusb_free_transfer(iso_transfer_1);
-  libusb_free_transfer(iso_transfer_2);
+  if(mIsoTransfer_1)
+    libusb_free_transfer(mIsoTransfer_1);
+  if(mIsoTransfer_2)
+    libusb_free_transfer(mIsoTransfer_2);
 }
 
 //--------------------------------------------------------------------------
@@ -243,14 +249,14 @@ bool AoapStream::threadLoop()
   {
     switch(msg->what)
     {
-      case AoapStream::AOAP_STREAMING_START:
+      case AOAP_STREAMING_START:
         fprintf(stderr, "Start streaming.\n");
-        startStreaming();
+        mStreamingActive = true;
         break;
 
-      case AoapStream::AOAP_STREAMING_STOP:
+      case AOAP_STREAMING_STOP:
         fprintf(stderr, "Stop streaming.\n");
-        stopStreaming();
+        mStreamingActive = false;
         break;
 
       default:
@@ -265,9 +271,10 @@ bool AoapStream::threadLoop()
     if(r != LIBUSB_SUCCESS)
     {
       fprintf(stderr,"Handle event error: %d %s\n", r, libusb_error_name(r));
-      libusb_cancel_transfer(iso_transfer_1);
-      libusb_cancel_transfer(iso_transfer_2);
+      libusb_cancel_transfer(mIsoTransfer_1);
+      libusb_cancel_transfer(mIsoTransfer_2);
       stopStreaming();
+      closeStreamingDevice();
     }
   }
 
@@ -277,13 +284,11 @@ bool AoapStream::threadLoop()
 //--------------------------------------------------------------------------
 void AoapStream::start()
 {
-  if(mDevHandle != NULL)
-    mThreadQueue.postMessage(new CMessage(AoapStream::AOAP_STREAMING_START));
+  mThreadQueue.postMessage(new CMessage(AoapStream::AOAP_STREAMING_START));
 }
 
 //--------------------------------------------------------------------------
 void AoapStream::stop()
 {
-  if(mDevHandle != NULL)
-    mThreadQueue.postMessage(new CMessage(AoapStream::AOAP_STREAMING_STOP));
+  mThreadQueue.postMessage(new CMessage(AoapStream::AOAP_STREAMING_STOP));
 }

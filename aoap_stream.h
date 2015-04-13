@@ -16,6 +16,7 @@ class AoapStream : public Thread
 {
 public:
   AoapStream();
+  ~AoapStream();
 
   void start();
   void stop();
@@ -38,14 +39,16 @@ private:
   void startStreaming();
   void stopStreaming();
 
+  static void iso_transfer_cb(struct libusb_transfer *xfr);
+
 
   CMessageQueue                mThreadQueue;
   libusb_device_handle        *mDevHandle;
   libusb_interface_descriptor  mInterfaceDesc;
-  libusb_transfer             *iso_transfer_1,
-                              *iso_transfer_2;
-  unsigned char                iso_buffer_1[4096];
-  unsigned char                iso_buffer_2[4096];
+  libusb_transfer             *mIsoTransfer_1,
+                              *mIsoTransfer_2;
+  unsigned char                mIsoBuffer_1[4096];
+  unsigned char                mIsoBuffer_2[4096];
   bool                         mStreamingActive;
 };
 

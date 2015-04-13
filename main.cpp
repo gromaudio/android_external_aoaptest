@@ -258,7 +258,7 @@ acc_exit:
   libusb_exit(NULL);
   return exit_code;
 }
-
+/*
 //--------------------------------------------------------------------------
 void start_streaming(libusb_device_handle *dev_handle, unsigned char iso_ep)
 {
@@ -335,7 +335,7 @@ void start_streaming(libusb_device_handle *dev_handle, unsigned char iso_ep)
   libusb_free_transfer(iso_transfer_1);
   libusb_free_transfer(iso_transfer_2);
 }
-
+*/
 /*
 //--------------------------------------------------------------------------
 int find_streaming_interface(libusb_device_handle *dev_handle, libusb_interface_descriptor *interface_desc)
