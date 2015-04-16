@@ -2,7 +2,7 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= aoap_test.c
+LOCAL_SRC_FILES:= aoap_test.cpp
 
 LOCAL_MODULE:= aoap_test
 
