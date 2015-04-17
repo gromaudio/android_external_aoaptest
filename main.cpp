@@ -15,15 +15,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include <utils/StrongPointer.h>
-#if defined(__ANDROID__) || defined(ANDROID)
-  #include "libusb/libusb.h"
-#else
-  #include <libusb-1.0/libusb.h>
-#endif
+#include "libusb/libusb.h"
 #include "aoap_stream.h"
-
-//-----------------------------------------------------------------------------
-typedef struct libusb_interface_descriptor libusb_interface_descriptor;
 
 //-----------------------------------------------------------------------------
 #define NUM_ISO_PACK                    8

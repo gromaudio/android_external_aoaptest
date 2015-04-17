@@ -2,12 +2,9 @@
 #define __AOAP_STREAM_H__
 
 #include <utils/threads.h>
+#include <media/AudioTrack.h>
 #include "messageQueue.h"
-#if defined(__ANDROID__) || defined(ANDROID)
-  #include "libusb/libusb.h"
-#else
-  #include <libusb-1.0/libusb.h>
-#endif
+#include "libusb/libusb.h"
 
 
 using namespace android;
@@ -50,6 +47,8 @@ private:
   unsigned char                mIsoBuffer_1[4096];
   unsigned char                mIsoBuffer_2[4096];
   bool                         mStreamingActive;
+
+  sp<AudioTrack>               mAudioTrack;
 };
 
 

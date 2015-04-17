@@ -31,8 +31,20 @@ AoapStream::~AoapStream()
 //--------------------------------------------------------------------------
 status_t AoapStream::readyToRun()
 {
+  size_t frameCount;
+
   openStreamingDevice();
   startStreaming();
+
+  AudioTrack::getMinFrameCount(&frameCount,
+                                AUDIO_STREAM_MUSIC,
+                                44100);
+
+  mAudioTrack = new AudioTrack( AUDIO_STREAM_MUSIC,
+                                44100,
+                                AUDIO_FORMAT_PCM_16_BIT,
+                                AUDIO_CHANNEL_OUT_STEREO,
+                                3*frameCount);
   return NO_ERROR;
 }
 
@@ -155,22 +167,23 @@ void AoapStream::closeStreamingDevice()
 //-----------------------------------------------------------------------------
 void AoapStream::iso_transfer_cb(struct libusb_transfer *xfr)
 {
-  int i, data_size;
+  int i;
+  unsigned char *buffer;
 
   if(xfr->type == LIBUSB_TRANSFER_TYPE_ISOCHRONOUS)
   {
-    data_size = 0;
+    buffer = xfr->buffer;
     for(i = 0; i < xfr->num_iso_packets; i++)
     {
       struct libusb_iso_packet_descriptor *pack = &xfr->iso_packet_desc[i];
-      data_size += pack->actual_length;
-//      printf("pack%u status:%d, length:%u, actual_length:%u\n", i, pack->status, pack->length, pack->actual_length);
+      static_cast<AoapStream*>(xfr->user_data)->mAudioTrack->write(buffer,
+                                                                   pack->actual_length);
+      buffer += pack->length;
     }
-    fprintf(stderr,"ISO completted: %d, %d\n", (int)xfr->user_data, data_size);
+//    fprintf(stderr,"ISO completted: %d %d\n", xfr->num_iso_packets, xfr->actual_length);
   }
 
   libusb_submit_transfer(xfr);
-//  bCompleted = 1;
 }
 
 //--------------------------------------------------------------------------
@@ -202,7 +215,7 @@ void AoapStream::startStreaming()
                            sizeof(mIsoBuffer_1),
                            NUM_ISO_PACK,
                            iso_transfer_cb,
-                           (void*)1,
+                           (void*)this,
                            0);
   libusb_fill_iso_transfer(mIsoTransfer_2,
                            mDevHandle,
@@ -211,7 +224,7 @@ void AoapStream::startStreaming()
                            sizeof(mIsoBuffer_2),
                            NUM_ISO_PACK,
                            iso_transfer_cb,
-                           (void*)2,
+                           (void*)this,
                            0);
 
   libusb_set_iso_packet_lengths(mIsoTransfer_1, iMaxPacketSize);
@@ -243,7 +256,7 @@ void AoapStream::stopStreaming()
 //--------------------------------------------------------------------------
 bool AoapStream::threadLoop()
 {
-  sp<CMessage> msg = mThreadQueue.waitMessage(1000000);
+  sp<CMessage> msg = mThreadQueue.waitMessage(0);
 
   if(msg != 0)
   {
@@ -252,11 +265,13 @@ bool AoapStream::threadLoop()
       case AOAP_STREAMING_START:
         fprintf(stderr, "Start streaming.\n");
         mStreamingActive = true;
+        mAudioTrack->start();
         break;
 
       case AOAP_STREAMING_STOP:
         fprintf(stderr, "Stop streaming.\n");
         mStreamingActive = false;
+        mAudioTrack->stop();
         break;
 
       default:

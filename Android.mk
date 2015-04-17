@@ -20,6 +20,7 @@ LOCAL_SHARED_LIBRARIES := \
         libcutils \
         libutils \
         libstlport \
+        libmedia \
         libusb
 
 LOCAL_MODULE_TAGS := eng
