@@ -16,7 +16,7 @@
 #include <sys/types.h>
 #include <utils/StrongPointer.h>
 #include "libusb/libusb.h"
-#include "aoap_stream.h"
+#include "pcm_stream.h"
 
 //-----------------------------------------------------------------------------
 #define NUM_ISO_PACK                    8
@@ -234,7 +234,7 @@ acc_exit:
 void start_streaming(void)
 {
   int ch;
-  sp<AoapStream> aoapstream = new AoapStream();
+  sp<PcmStream> pcmstream = new PcmStream();
 
   for(;;)
   {
@@ -243,11 +243,11 @@ void start_streaming(void)
     switch(ch)
     {
       case '1':
-        aoapstream->start();
+        pcmstream->start();
         break;
 
       case '2':
-        aoapstream->stop();
+        pcmstream->stop();
         break;
 
       default:
