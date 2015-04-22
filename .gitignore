@@ -1,7 +1,1 @@
-*
-!*.c
-!*.cpp
-!*.h
-!Makefile
-!Android.mk
-!*.gitignore
+

@@ -18,6 +18,14 @@
 #include "libusb/libusb.h"
 #include "pcm_stream.h"
 
+extern "C" {
+#include "common.h"
+#include "intercom/usbhost_bulk.h"
+#include "interface/browser_interface.h"
+#include "interface/android/android_browser.h"
+#include "interface/android/android_commands.h"
+}
+
 //-----------------------------------------------------------------------------
 #define NUM_ISO_PACK                    8
 #define DEFAULT_VID                     0x18d1
@@ -234,24 +242,72 @@ acc_exit:
 void start_streaming(void)
 {
   int ch;
-  sp<PcmStream> pcmstream = new PcmStream();
+  int                              nodesCount,
+                                   itemsCount;
+  char                             itemName[100];
+  DEVICE_BROWSER_ITEM              item;
+  const DEVICE_BROWSER_INTERFACE  *pAndroidBrowser;
+  ANDROID_BROWSER_STATE            AndroidBrowserState;
+  ANDROID_COMMAND_STATE            AndroidCommandState;
+  sp<PcmStream>                    pcmstream = new PcmStream();
 
-  for(;;)
+  ACOMMAND_Init();
+  ABROWSER_Init();
+  if( OK == Bulk_DriveInsert())
   {
-    ch = fgetc(stdin);
+    ACOMMAND_Activate(&AndroidCommandState);
+    ABROWSER_Activate(&AndroidBrowserState);
+    pAndroidBrowser = ABROWSER_GetInterface();
+    item.name       = itemName;
+    item.nameSize   = sizeof(itemName);
 
-    switch(ch)
+    for(;;)
     {
-      case '1':
-        pcmstream->start();
-        break;
+      ch = fgetc(stdin);
 
-      case '2':
-        pcmstream->stop();
-        break;
+      switch(ch)
+      {
+        case '1':
+          pcmstream->start();
+          break;
 
-      default:
-        break;
+        case '2':
+          pcmstream->stop();
+          break;
+
+        case 'r':
+          fprintf(stderr, "Scan root:\n");
+
+          pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
+          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+          fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+
+          for(int i = 0; i < nodesCount; i++)
+          {
+            pAndroidBrowser->getNode(i, &item);
+            fprintf(stderr, "  %s\n", item.name);
+          }
+          break;
+
+        case 'p':
+          fprintf(stderr, "Scan playlists:\n");
+
+          pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
+          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+          pAndroidBrowser->setNode(0);
+          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+          fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+
+          for(int i = 0; i < nodesCount; i++)
+          {
+            pAndroidBrowser->getNode(i, &item);
+            fprintf(stderr, "  %s\n", item.name);
+          }
+          break;
+
+        default:
+          break;
+      }
     }
   }
 }
