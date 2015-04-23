@@ -44,7 +44,10 @@ signed char Bulk_DriveInsert( void )
   {
     dev_handle = libusb_open_device_with_vid_pid(NULL, AOAP_VID, aSupportedPIDs[ i ]);
     if(dev_handle != NULL)
+    {
       fprintf(stderr,"Accessory device found(%04x:%04x).\n", AOAP_VID, aSupportedPIDs[ i ]);
+      break;
+    }
   }
 
   if(dev_handle == NULL)

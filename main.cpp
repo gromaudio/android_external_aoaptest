@@ -241,10 +241,11 @@ acc_exit:
 //--------------------------------------------------------------------------
 void start_streaming(void)
 {
-  int ch;
   int                              nodesCount,
                                    itemsCount;
   char                             itemName[100];
+  char                             inputBuffer[20];
+  char                             *input;
   DEVICE_BROWSER_ITEM              item;
   const DEVICE_BROWSER_INTERFACE  *pAndroidBrowser;
   ANDROID_BROWSER_STATE            AndroidBrowserState;
@@ -261,11 +262,21 @@ void start_streaming(void)
     item.name       = itemName;
     item.nameSize   = sizeof(itemName);
 
+    fprintf(stderr, "Browser commands:\n");
+    fprintf(stderr, "  r        - scan root.\n");
+    fprintf(stderr, "  g id     - scan group by its Id.\n");
+    fprintf(stderr, "  g id idx - scan group by its Id and item index.\n");
+
     for(;;)
     {
-      ch = fgetc(stdin);
+      input = fgets(inputBuffer, sizeof(inputBuffer), stdin);
+      if(input == NULL)
+      {
+        usleep(10000);
+        continue;
+      }
 
-      switch(ch)
+      switch(input[0])
       {
         case '1':
           pcmstream->start();
@@ -289,19 +300,32 @@ void start_streaming(void)
           }
           break;
 
-        case 'p':
-          fprintf(stderr, "Scan playlists:\n");
-
-          pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
-          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
-          pAndroidBrowser->setNode(0);
-          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
-          fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
-
-          for(int i = 0; i < nodesCount; i++)
+        case 'g':
+          if(strlen(input) >= 3)
           {
-            pAndroidBrowser->getNode(i, &item);
-            fprintf(stderr, "  %s\n", item.name);
+            fprintf(stderr, "Scan group %d:\n", input[2] - 0x30);
+            pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
+            pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+            pAndroidBrowser->setNode(input[2] - 0x30);
+            pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+            fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+            for(int i = 0; i < nodesCount; i++)
+            {
+              pAndroidBrowser->getNode(i, &item);
+              fprintf(stderr, "  %s\n", item.name);
+            }
+          }
+
+          if(strlen(input) >= 5)
+          {
+            pAndroidBrowser->setNode(input[4] - 0x30);
+            pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+            fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+            for(int i = 0; i < itemsCount; i++)
+            {
+              pAndroidBrowser->getItem(i, &item);
+              fprintf(stderr, "  %s\n", item.name);
+            }
           }
           break;
 
