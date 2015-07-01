@@ -17,6 +17,28 @@
 #include <utils/StrongPointer.h>
 #include "libusb/libusb.h"
 #include "pcm_stream.h"
+#include "auto_touch.h"
+
+#include <binder/IServiceManager.h>
+#include <binder/ProcessState.h>
+#include <media/ICrypto.h>
+#include <media/stagefright/foundation/ABuffer.h>
+#include <media/stagefright/foundation/ADebug.h>
+#include <media/stagefright/foundation/ALooper.h>
+#include <media/stagefright/foundation/AMessage.h>
+#include <media/stagefright/foundation/AString.h>
+#include <media/stagefright/DataSource.h>
+#include <media/stagefright/MediaCodec.h>
+#include <media/stagefright/MediaCodecList.h>
+#include <media/stagefright/MediaDefs.h>
+#include <media/stagefright/MetaData.h>
+#include <media/stagefright/NativeWindowWrapper.h>
+#include <gui/ISurfaceComposer.h>
+#include <gui/SurfaceComposerClient.h>
+#include <gui/Surface.h>
+#include <ui/DisplayInfo.h>
+#include <android/native_window.h>
+#include "Utils.h"
 
 extern "C" {
 #include "common.h"
@@ -24,7 +46,11 @@ extern "C" {
 #include "interface/browser_interface.h"
 #include "interface/android/android_browser.h"
 #include "interface/android/android_commands.h"
+
+#include "android_auto/hu.h"
 }
+
+using namespace android;
 
 //-----------------------------------------------------------------------------
 #define NUM_ISO_PACK                    8
@@ -41,14 +67,29 @@ extern "C" {
 #define ACCESSORY_SEND_HID_EVENT        57
 #define ACCESSORY_AUDIO                 58
 
-#define ACCESSORY_STRING_MANUFACTURER   "Gromaudio"
-#define ACCESSORY_STRING_MODEL          "GROMLinQ"
-#define ACCESSORY_STRING_DESCRIPTION    "Accessory Linq"
-#define ACCESSORY_STRING_VERSION        "0.9"
-#define ACCESSORY_STRING_URL            "http://www.gromaudio.com/aalinq"
-#define ACCESSORY_STRING_SERIAL         "0000000012345678"
+#define AALINQ_STRING_MANUFACTURER      "Gromaudio"
+#define AALINQ_STRING_MODEL             "GROMLinQ"
+#define AALINQ_STRING_DESCRIPTION       "Accessory Linq"
+#define AALINQ_STRING_VERSION           "0.9"
+#define AALINQ_STRING_URL               "http://www.gromaudio.com/aalinq"
+#define AALINQ_STRING_SERIAL            "0000000012345678"
+
+#define AUTO_STRING_MANUFACTURER        "Android"
+#define AUTO_STRING_MODEL               "Android Auto"
+#define AUTO_STRING_DESCRIPTION         "Head Unit"
+#define AUTO_STRING_VERSION             "1.0"
+#define AUTO_STRING_URL                 "http://www.android.com/"
+#define AUTO_STRING_SERIAL              "0"
 
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
+
+typedef struct {
+  size_t   mIndex;
+  size_t   mOffset;
+  size_t   mSize;
+  int64_t  mPresentationTimeUs;
+  uint32_t mFlags;
+}BufferInfo;
 
 //-----------------------------------------------------------------------------
 const uint16_t aSupportedPIDs[] = { 0x2d02, 0x2d03, 0x2d04, 0x2d05 };
@@ -115,7 +156,7 @@ void aoap_send_string(libusb_device_handle *dev_handle,
 }
 
 //--------------------------------------------------------------------------
-int activate_accessory(uint16_t VID, uint16_t PID, char bListOnly, char bReset)
+int activate_accessory(uint16_t VID, uint16_t PID, bool bListOnly, bool bReset, bool bAuto)
 {
   libusb_device_handle *dev_handle;
   int                   r,
@@ -185,12 +226,24 @@ int activate_accessory(uint16_t VID, uint16_t PID, char bListOnly, char bReset)
   }
   fprintf(stderr,"AOAP version: %d\n", buff[0]);
 
-  aoap_send_string(dev_handle, 0, ACCESSORY_STRING_MANUFACTURER, strlen(ACCESSORY_STRING_MANUFACTURER));
-  aoap_send_string(dev_handle, 1, ACCESSORY_STRING_MODEL,        strlen(ACCESSORY_STRING_MODEL));
-  aoap_send_string(dev_handle, 2, ACCESSORY_STRING_DESCRIPTION,  strlen(ACCESSORY_STRING_DESCRIPTION));
-  aoap_send_string(dev_handle, 3, ACCESSORY_STRING_VERSION,      strlen(ACCESSORY_STRING_VERSION));
-  aoap_send_string(dev_handle, 4, ACCESSORY_STRING_URL,          strlen(ACCESSORY_STRING_URL));
-  aoap_send_string(dev_handle, 5, ACCESSORY_STRING_SERIAL,       strlen(ACCESSORY_STRING_SERIAL));
+  if(!bAuto)
+  {
+    aoap_send_string(dev_handle, 0, AALINQ_STRING_MANUFACTURER, strlen(AALINQ_STRING_MANUFACTURER));
+    aoap_send_string(dev_handle, 1, AALINQ_STRING_MODEL,        strlen(AALINQ_STRING_MODEL));
+    aoap_send_string(dev_handle, 2, AALINQ_STRING_DESCRIPTION,  strlen(AALINQ_STRING_DESCRIPTION));
+    aoap_send_string(dev_handle, 3, AALINQ_STRING_VERSION,      strlen(AALINQ_STRING_VERSION));
+    aoap_send_string(dev_handle, 4, AALINQ_STRING_URL,          strlen(AALINQ_STRING_URL));
+    aoap_send_string(dev_handle, 5, AALINQ_STRING_SERIAL,       strlen(AALINQ_STRING_SERIAL));
+  }
+  else
+  {
+    aoap_send_string(dev_handle, 0, AUTO_STRING_MANUFACTURER, strlen(AUTO_STRING_MANUFACTURER));
+    aoap_send_string(dev_handle, 1, AUTO_STRING_MODEL,        strlen(AUTO_STRING_MODEL));
+    aoap_send_string(dev_handle, 2, AUTO_STRING_DESCRIPTION,  strlen(AUTO_STRING_DESCRIPTION));
+    aoap_send_string(dev_handle, 3, AUTO_STRING_VERSION,      strlen(AUTO_STRING_VERSION));
+    aoap_send_string(dev_handle, 4, AUTO_STRING_URL,          strlen(AUTO_STRING_URL));
+    aoap_send_string(dev_handle, 5, AUTO_STRING_SERIAL,       strlen(AUTO_STRING_SERIAL));
+  }
 
   r = libusb_control_transfer(dev_handle,
                               LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
@@ -337,23 +390,308 @@ void start_streaming(void)
 }
 
 //--------------------------------------------------------------------------
+unsigned char cmd_buf[256];
+unsigned char res_buf[65536 * 16];
+
+sp<SurfaceComposerClient> gComposerClient;
+sp<SurfaceControl>        gControl;
+sp<Surface>               gSurface;
+sp<NativeWindowWrapper>   gNativeWindowWrapper;
+struct ANativeWindow     *gNativeWindow;
+sp<MediaCodec>            gCodec;
+sp<ALooper>               gLooper;
+Vector<sp<ABuffer> >      gInBuffers;
+Vector<sp<ABuffer> >      gOutBuffers;
+
+// --------------------------------------------------------------------------------
+static void initOutputSurface( void )
+{
+  gComposerClient = new SurfaceComposerClient;
+  if( OK == gComposerClient->initCheck() )
+  {
+    DisplayInfo info;
+    sp<IBinder> display( SurfaceComposerClient::getBuiltInDisplay(
+                         ISurfaceComposer::eDisplayIdMain ) );
+
+    SurfaceComposerClient::getDisplayInfo( display, &info );
+    size_t displayWidth  = info.w;
+    size_t displayHeight = info.h;
+
+    fprintf( stderr, "display is %d x %d\n", displayWidth, displayHeight );
+
+    gControl = gComposerClient->createSurface( String8("A Surface"),
+                                               displayWidth,
+                                               displayHeight,
+                                               PIXEL_FORMAT_RGB_565,
+                                               0 );
+
+    if( ( gControl != NULL ) && ( gControl->isValid() ) )
+    {
+      SurfaceComposerClient::openGlobalTransaction();
+      if( ( OK == gControl->setLayer( INT_MAX ) ) &&
+          ( OK == gControl->show() ) )
+      {
+        SurfaceComposerClient::closeGlobalTransaction();
+        gSurface = gControl->getSurface();
+      }
+    }
+  }
+
+  if( gSurface == NULL )
+  {
+    fprintf( stderr, "Screen surface create error\n" );
+  }
+  gNativeWindowWrapper = new NativeWindowWrapper( gSurface );
+  gNativeWindow = gSurface.get();
+
+  //native_window_set_buffers_transform( gNativeWindow, NATIVE_WINDOW_TRANSFORM_FLIP_V );
+  native_window_set_buffers_format( gNativeWindow, HAL_PIXEL_FORMAT_YV12 );
+  native_window_set_buffers_dimensions( gNativeWindow, 800, 480 );
+  native_window_set_scaling_mode( gNativeWindow, NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW );
+
+  fprintf( stderr, "Screen surface created\n" );
+  fprintf( stderr, "Screen surface %s\n", (gSurface->isValid(gSurface)?"valid":"invalid") );
+}
+
+//-----------------------------------------------------------------------------
+uint8_t AvccExtraData[] = {
+	0x01, 0x42, 0x80, 0x1F, 0xFF, 0xE1, 0x00, 0x0D, 0x67, 0x42, 0x80, 0x1F, 0xDA, 0x03, 0x20, 0xF6,
+	0x80, 0x6D, 0x0A, 0x13, 0x50, 0x01, 0x00, 0x04, 0x68, 0xCE, 0x06, 0xE2
+};
+
+//-----------------------------------------------------------------------------
+static void initHwCodec(uint8_t *configData, size_t configDataSize)
+{
+  sp<AMessage> format;
+  sp<MetaData> meta = new MetaData;
+  status_t     res;
+
+  gLooper = new ALooper;
+  gLooper->start();
+
+  gCodec = MediaCodec::CreateByType( gLooper, "video/avc", false );
+  if( gCodec != NULL )
+  {
+    fprintf( stderr, "Codec created\n" );
+  }
+
+  meta->clear();
+  meta->setCString( kKeyMIMEType,         "video/avc" );
+  meta->setInt32(   kKeyTrackID,          1 );
+  meta->setInt32(   kKeyWidth,            800 );
+  meta->setInt32(   kKeyHeight,           480 );
+  meta->setInt32(   kKeyDisplayWidth,     800 );
+  meta->setInt32(   kKeyDisplayHeight,    480 );
+  meta->setData(    kKeyAVCC, kTypeAVCC,  configData, configDataSize );
+  meta->dumpToLog();
+  convertMetaDataToMessage( meta, &format );
+
+  res = gCodec->configure( format, gNativeWindowWrapper->getSurfaceTextureClient(), NULL, 0 );
+  if( res != OK )
+  {
+    fprintf( stderr, "Codec configure error: %d\n", res );
+    exit(1);
+  }
+
+  res = gCodec->start();
+  if( res != OK )
+  {
+    fprintf( stderr, "Codec start error: %d\n", res );
+    exit(1);
+  }
+
+  res = gCodec->getInputBuffers( &gInBuffers );
+  if( res != OK )
+  {
+    fprintf( stderr, "Codec get input buffers error: %d\n", res );
+    exit(1);
+  }
+
+  res = gCodec->getOutputBuffers( &gOutBuffers );
+  if( res != OK )
+  {
+    fprintf( stderr, "Codec get output buffers error: %d\n", res );
+    exit(1);
+  }
+
+  sp<ABuffer> srcBuffer;
+  size_t j = 0;
+  while( format->findBuffer( StringPrintf("csd-%d", j).c_str(), &srcBuffer ) )
+  {
+    size_t index;
+    res = gCodec->dequeueInputBuffer( &index, -1ll );
+    if( res != OK )
+    {
+      fprintf( stderr, "Dequeue error\n" );
+    }
+
+    const sp<ABuffer> &dstBuffer = gInBuffers.itemAt( index );
+
+    dstBuffer->setRange( 0, srcBuffer->size() );
+    memcpy( dstBuffer->data(), srcBuffer->data(), srcBuffer->size() );
+
+    fprintf( stderr, "CSD data size: %d\n", srcBuffer->size() );
+    for( size_t i = 0; i < srcBuffer->size(); i++ )
+    {
+      fprintf( stderr, "0x%02X ", srcBuffer->data()[ i ] );
+      if( !( ( i + 1 ) % 8) )
+        fprintf( stderr, "\n" );
+    }
+    fprintf(stderr, "\n" );
+
+    res = gCodec->queueInputBuffer( index,
+                                    0,
+                                    dstBuffer->size(),
+                                    0ll,
+                                    MediaCodec::BUFFER_FLAG_CODECCONFIG );
+    if( res != OK )
+    {
+      fprintf( stderr, "Queue error\n" );
+    }
+
+    j++;
+  }
+
+  fprintf( stderr, "Codec init OK.\n" );
+}
+
+//--------------------------------------------------------------------------
+static void decodeHwFrame(uint8_t *inBuff, size_t inBuffSize)
+{
+  status_t        res;
+  BufferInfo      info;
+  size_t          index;
+
+  do{
+    res = gCodec->dequeueInputBuffer( &index, 1ll );
+    if( res == OK )
+    {
+      const sp<ABuffer> &buffer = gInBuffers.itemAt( index );
+
+      buffer->setRange( 0, inBuffSize );
+      memcpy( (uint8_t*)buffer->data(), inBuff, inBuffSize );
+
+      gCodec->queueInputBuffer( index,
+                                buffer->offset(),
+                                buffer->size(),
+                                0ll,
+                                0 );
+      break;
+    }
+
+    res = gCodec->dequeueOutputBuffer( &info.mIndex,
+                                       &info.mOffset,
+                                       &info.mSize,
+                                       &info.mPresentationTimeUs,
+                                       &info.mFlags);
+    if( res == OK )
+    {
+      gCodec->renderOutputBufferAndRelease( info.mIndex );
+    }
+  }while( true );
+}
+
+//--------------------------------------------------------------------------
+static size_t saveFrame(uint8_t *frameData, size_t frameDataSize)
+{
+  static int  file_counter  = 0;
+  size_t      bytes_written = 0;
+  char        file_name[100];
+  FILE        *file;
+
+  sprintf(file_name, "/boot/auto/AnnexB/auto_%03d.raw", file_counter);
+  file = fopen(file_name, "wb");
+  if(file != NULL)
+  {
+    bytes_written = fwrite(frameData, sizeof(uint8_t), frameDataSize, file);
+    fclose(file);
+    file_counter++;
+  }
+  else
+  {
+    fprintf(stderr, "Error opening file %s: %d, %s\n", file_name, errno, strerror(errno));
+  }
+  return bytes_written;
+}
+
+//--------------------------------------------------------------------------
+static void start_auto(void)
+{
+  int             bytes_received,
+                  bytes_written,
+                  frame_counter;
+  bool            first_frame;
+  struct timeval  tv1, tv2;
+  double          elapsedTime;
+  size_t          cmd_len;
+
+  frame_counter= 0;
+  first_frame  = true;
+  cmd_buf[0]   = 121;
+  cmd_buf[1]   = 0x81;
+  cmd_buf[2]   = 0x02;
+  cmd_len      = 3;
+  jni_aa_cmd( cmd_len, (char*)cmd_buf, 0, NULL );
+
+  ProcessState::self()->startThreadPool();
+  DataSource::RegisterDefaultSniffers();
+  initOutputSurface();
+  TOUCH_init();
+
+//  gettimeofday( &tv1, NULL );
+  while(true)
+  {
+    cmd_len = TOUCH_getAction(cmd_buf, sizeof(cmd_buf));
+    bytes_received = jni_aa_cmd(cmd_len, (char*)cmd_buf, sizeof(res_buf), (char*)res_buf);
+    if( bytes_received > 0 )
+    {
+//      bytes_written = saveFrame(res_buf, bytes_received);
+      fprintf(stderr, "-------------------------------frame: %d, %d\n", bytes_received, bytes_written);
+      if(first_frame)
+      {
+        initHwCodec(AvccExtraData, sizeof(AvccExtraData));
+        first_frame = false;
+      }
+      else
+      {
+        decodeHwFrame(res_buf, bytes_received);
+      }
+
+/*
+      frame_counter++;
+      if(frame_counter == 25)
+      {
+        gettimeofday( &tv2, NULL );
+        elapsedTime = tv2.tv_sec - tv1.tv_sec;
+        elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
+        fprintf(stderr, "Decoded %d frames in %5.3f sec = %5.2f fps\n", frame_counter,
+                                                                        elapsedTime,
+                                                                        frame_counter/elapsedTime );
+      }
+*/
+    }
+  }
+}
+
+//--------------------------------------------------------------------------
 static void usage(FILE * fp, int argc, char ** argv)
 {
   fprintf( fp,
            "Usage: %s [options]\n\n"
            "Options:\n"
-           "-v | --vid Device VID [18d1]\n"
-           "-p | --pid Device PID [4ee2]\n"
-           "-h | --help Print this message\n"
-           "-l | --list List available devices\n"
-           "-r | --reset Perform port reset after activating accessory\n"
+           "-v | --vid    Device VID [18d1]\n"
+           "-p | --pid    Device PID [4ee2]\n"
+           "-h | --help   Print this message\n"
+           "-l | --list   List available devices\n"
+           "-r | --reset  Perform port reset after activating accessory\n"
            "-s | --stream Start audio streaming after activating accessory\n"
+           "-a | --auto   Activate Android auto\n"
            "",
            argv[0] );
 }
 
 //--------------------------------------------------------------------------
-static const char short_options[] = "v:p:hlrs";
+static const char short_options[] = "v:p:hlrsa";
 static const struct option long_options[] =
 {
   { "vid",  required_argument, NULL, 'v' },
@@ -362,6 +700,7 @@ static const struct option long_options[] =
   { "list",       no_argument, NULL, 'l' },
   { "reset",      no_argument, NULL, 'r' },
   { "stream",     no_argument, NULL, 's' },
+  { "auto",       no_argument, NULL, 'a' },
   { 0, 0, 0, 0 }
 };
 
@@ -370,15 +709,17 @@ int main(int argc, char ** argv)
 {
   uint16_t  VID,
             PID;
-  char      bListOnly,
+  bool      bListOnly,
             bReset,
-            bStream;
+            bStream,
+            bAuto;
 
   VID       = DEFAULT_VID;
   PID       = DEFAULT_PID;
-  bListOnly = 0;
-  bReset    = 0;
-  bStream   = 0;
+  bListOnly = false;
+  bReset    = false;
+  bStream   = false;
+  bAuto     = false;
 
   for(;;)
   {
@@ -408,15 +749,19 @@ int main(int argc, char ** argv)
         break;
 
       case 'l':
-        bListOnly = 1;
+        bListOnly = true;
         break;
 
       case 'r':
-        bReset = 1;
+        bReset = true;
         break;
 
       case 's':
-        bStream = 1;
+        bStream = true;
+        break;
+
+      case 'a':
+        bAuto = true;
         break;
 
       default:
@@ -427,17 +772,18 @@ int main(int argc, char ** argv)
   }
 
 
-  if(activate_accessory(VID, PID, bListOnly, bReset) < 0)
+  if(activate_accessory(VID, PID, bListOnly, bReset, bAuto) < 0)
   {
     if(!bListOnly)
       fprintf(stderr,"Accessory cannot be activated.\n");
     exit(EXIT_FAILURE);
   }
 
-  if(!bStream)
-    exit(EXIT_SUCCESS);
+  if(bAuto)
+    start_auto();
 
-  start_streaming();
+  if(bStream)
+    start_streaming();
 
   exit(EXIT_SUCCESS);
 }
