@@ -67,18 +67,18 @@ int             elapsedTime;
       loge ("CHECK: iaap_state: %d (%s)", iaap_state, state_get (iaap_state));
       return (-1);
     }
-gettimeofday( &tv2, NULL );
-elapsedTime = 1000000 * (tv2.tv_sec - tv1.tv_sec);
-elapsedTime += tv2.tv_usec - tv1.tv_usec;
-fprintf(stderr, "time1 %d usec\n", elapsedTime);
+//gettimeofday( &tv2, NULL );
+//elapsedTime = 1000000 * (tv2.tv_sec - tv1.tv_sec);
+//elapsedTime += tv2.tv_usec - tv1.tv_usec;
+//fprintf(stderr, "time1 %d usec\n", elapsedTime);
 
-gettimeofday( &tv1, NULL );
+//gettimeofday( &tv1, NULL );
     ret = hu_usb_recv (buf, len, tmo);
-gettimeofday( &tv2, NULL );
-elapsedTime = 1000000 * (tv2.tv_sec - tv1.tv_sec);
-elapsedTime += tv2.tv_usec - tv1.tv_usec;
-fprintf(stderr, "time2 %d usec\n", elapsedTime);
-gettimeofday( &tv1, NULL );
+//gettimeofday( &tv2, NULL );
+//elapsedTime = 1000000 * (tv2.tv_sec - tv1.tv_sec);
+//elapsedTime += tv2.tv_usec - tv1.tv_usec;
+//fprintf(stderr, "time2 %d usec\n", elapsedTime);
+//gettimeofday( &tv1, NULL );
 
 
 

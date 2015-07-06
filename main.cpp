@@ -646,7 +646,7 @@ static void start_auto(void)
     if( bytes_received > 0 )
     {
 //      bytes_written = saveFrame(res_buf, bytes_received);
-      fprintf(stderr, "-------------------------------frame: %d, %d\n", bytes_received, bytes_written);
+//      fprintf(stderr, "-------------------------------frame: %d, %d\n", bytes_received, bytes_written);
       if(first_frame)
       {
         initHwCodec(AvccExtraData, sizeof(AvccExtraData));
@@ -657,18 +657,18 @@ static void start_auto(void)
         decodeHwFrame(res_buf, bytes_received);
       }
 
-/*
-      frame_counter++;
-      if(frame_counter == 25)
-      {
-        gettimeofday( &tv2, NULL );
-        elapsedTime = tv2.tv_sec - tv1.tv_sec;
-        elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
-        fprintf(stderr, "Decoded %d frames in %5.3f sec = %5.2f fps\n", frame_counter,
-                                                                        elapsedTime,
-                                                                        frame_counter/elapsedTime );
-      }
-*/
+
+//      frame_counter++;
+//      if(frame_counter == 25)
+//      {
+//        gettimeofday( &tv2, NULL );
+//        elapsedTime = tv2.tv_sec - tv1.tv_sec;
+//        elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
+//        fprintf(stderr, "Decoded %d frames in %5.3f sec = %5.2f fps\n", frame_counter,
+//                                                                        elapsedTime,
+//                                                                        frame_counter/elapsedTime );
+//      }
+
     }
   }
 }
