@@ -21,15 +21,15 @@ LOCAL_MODULE_PATH     := system/lib
 LOCAL_SRC_FILES       := src/android_auto/libs/libcrypto.a
 include $(BUILD_PREBUILT)
 
-include $(CLEAR_VARS)
-LOCAL_MODULE          := libusbnok
-LOCAL_MODULE_SUFFIX   := .a
-LOCAL_MODULE_CLASS    := STATIC_LIBRARIES
-LOCAL_MODULE_TAGS     := eng
-LOCAL_PRELINK_MODULE  := false
-LOCAL_MODULE_PATH     := system/lib
-LOCAL_SRC_FILES       := src/android_auto/libs/libusbnok.a
-include $(BUILD_PREBUILT)
+#include $(CLEAR_VARS)
+#LOCAL_MODULE          := libusbnok
+#LOCAL_MODULE_SUFFIX   := .a
+#LOCAL_MODULE_CLASS    := STATIC_LIBRARIES
+#LOCAL_MODULE_TAGS     := eng
+#LOCAL_PRELINK_MODULE  := false
+#LOCAL_MODULE_PATH     := system/lib
+#LOCAL_SRC_FILES       := src/android_auto/libs/libusbnok.a
+#include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
 
@@ -55,7 +55,7 @@ LOCAL_SRC_FILES:= \
         src/android_auto/hu.c \
         src/android_auto/hu_uti.c \
         src/android_auto/hu_aap.c \
-        src/android_auto/hu_usb.c \
+        src/android_auto/hu_usb_android.c \
         src/android_auto/hu_ssl.c \
         src/android_auto/hu_aad.c
 
@@ -72,8 +72,7 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/utils
 
 LOCAL_STATIC_LIBRARIES := \
-        libcrypto \
-        libusbnok
+        libcrypto
 
 LOCAL_SHARED_LIBRARIES := \
         libc \
@@ -86,6 +85,8 @@ LOCAL_SHARED_LIBRARIES := \
         libmedia \
         libbinder \
         libgui \
+        libusb \
+        libusbhost \
         libui \
         libstagefright_foundation \
         libstagefright \

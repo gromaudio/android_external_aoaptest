@@ -263,6 +263,10 @@ int     LIBUSB_CALL libusb_bulk_transfer          (libusb_device_handle *dev_han
 
   int hu_usb_recv (byte * buf, int len, int tmo) {
     int ret = iusb_bulk_transfer (iusb_ep_in, buf, len, tmo);       // milli-second timeout
+
+if(len != 0xFFFF)
+  fprintf(stderr, "USB recv %d, %d\n", len, ret);
+    
     return (ret);
   }
 

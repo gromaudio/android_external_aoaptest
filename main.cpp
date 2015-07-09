@@ -39,6 +39,7 @@
 #include <ui/DisplayInfo.h>
 #include <android/native_window.h>
 #include "Utils.h"
+#include <usbhost/usbhost.h>
 
 extern "C" {
 #include "common.h"
@@ -643,7 +644,14 @@ static void start_auto(void)
   {
     cmd_len = TOUCH_getAction(cmd_buf, sizeof(cmd_buf));
     bytes_received = jni_aa_cmd(cmd_len, (char*)cmd_buf, sizeof(res_buf), (char*)res_buf);
-    if( bytes_received > 0 )
+
+    if(bytes_received < 0)
+    {
+      fprintf(stderr, "Android auto error: %s\n", strerror(bytes_received));
+      break;
+    }
+
+    if(bytes_received > 0)
     {
 //      bytes_written = saveFrame(res_buf, bytes_received);
 //      fprintf(stderr, "-------------------------------frame: %d, %d\n", bytes_received, bytes_written);
@@ -670,6 +678,133 @@ static void start_auto(void)
 //      }
 
     }
+  }
+}
+
+
+//--------------------------------------------------------------------------
+int usb_device_added(const char *dev_name, void *client_data)
+{
+  struct usb_device **usb_device = (struct usb_device**)client_data;
+
+  *usb_device = usb_device_open(dev_name);
+  if(*usb_device != NULL)
+  {
+    if( AOAP_VID == usb_device_get_vendor_id(*usb_device))
+      return 1;
+
+    usb_device_close(*usb_device);
+  }
+  return 0;
+}
+
+int usb_device_removed(const char *dev_name, void *client_data)
+{
+  fprintf(stderr, "usb removed cb: %s\n", dev_name);
+  return 0;
+}
+
+int usb_discovery_done(void *client_data)
+{
+  fprintf(stderr, "usb discovery cb\n");
+  return 0;
+}
+
+//--------------------------------------------------------------------------
+static void test_usb(void)
+{
+  int err;
+  struct usb_host_context         *usb_context;
+  struct usb_device               *usb_device;
+  struct usb_descriptor_header    *desc_header;
+  struct usb_descriptor_iter       desc_iter;
+  struct usb_interface_descriptor *aoap_i_desc      = NULL;
+  struct usb_endpoint_descriptor  *aoap_in_ep_desc  = NULL;
+  struct usb_endpoint_descriptor  *aoap_out_ep_desc = NULL;
+
+  usb_context = usb_host_init();
+  usb_host_run(usb_context,
+               usb_device_added,
+               usb_device_removed,
+               usb_discovery_done,
+               &usb_device);
+  fprintf(stderr, "AOAP device found: %04x, %s\n", usb_device_get_vendor_id(usb_device),
+                                                   usb_device_get_name(usb_device));
+
+  fprintf(stderr, "    manufacturer:  %s\n", usb_device_get_manufacturer_name(usb_device));
+  fprintf(stderr, "    product:       %s\n", usb_device_get_product_name(usb_device));
+
+  usb_descriptor_iter_init(usb_device, &desc_iter);
+  while((desc_header = usb_descriptor_iter_next(&desc_iter)) != NULL)
+  {
+    switch(desc_header->bDescriptorType)
+    {
+      case USB_DT_INTERFACE:
+      {
+        struct usb_interface_descriptor *desc = (struct usb_interface_descriptor *)desc_header;
+
+        if(aoap_i_desc == NULL)
+        {
+          fprintf(stderr, "INTERFACE DESCRIPTOR:\n");
+          fprintf(stderr, "    length:    %d\n",      desc->bLength);
+          fprintf(stderr, "    type:      0x%02X\n",  desc->bDescriptorType);
+          fprintf(stderr, "    number:    %d\n",      desc->bInterfaceNumber);
+          fprintf(stderr, "    altset:    %d\n",      desc->bAlternateSetting);
+          fprintf(stderr, "    endpoints: %d\n",      desc->bNumEndpoints);
+          fprintf(stderr, "    class:     0x%02X\n",  desc->bInterfaceClass);
+          fprintf(stderr, "    subclass:  0x%02X\n",  desc->bInterfaceSubClass);
+          fprintf(stderr, "    protocol:  0x%02X\n",  desc->bInterfaceProtocol);
+          fprintf(stderr, "    interface: %d\n",      desc->iInterface);
+
+          if( desc->bNumEndpoints == 2 &&
+              desc->bInterfaceClass == USB_CLASS_VENDOR_SPEC &&
+              desc->bInterfaceSubClass == USB_SUBCLASS_VENDOR_SPEC )
+          {
+            aoap_i_desc = desc;
+          }
+        }
+        break;
+      }
+
+      case USB_DT_ENDPOINT:
+      {
+        struct usb_endpoint_descriptor *desc = (struct usb_endpoint_descriptor *)desc_header;
+
+        if(aoap_in_ep_desc == NULL ||
+           aoap_out_ep_desc == NULL)
+        {
+          fprintf(stderr, "    ENDPOINT DESCRIPTOR:\n");
+          fprintf(stderr, "        length:     %d\n",      desc->bLength);
+          fprintf(stderr, "        type:       0x%02X\n",  desc->bDescriptorType);
+          fprintf(stderr, "        address:    0x%02X\n",  desc->bEndpointAddress);
+          fprintf(stderr, "        attributes: %d\n",      desc->bmAttributes);
+          fprintf(stderr, "        size:       %d\n",      desc->wMaxPacketSize);
+          fprintf(stderr, "        interval:   %d\n",      desc->bInterval);
+
+          if(aoap_i_desc != NULL)
+          {
+            if(desc->bEndpointAddress & USB_DIR_IN)
+              aoap_in_ep_desc  = desc;
+            else
+              aoap_out_ep_desc = desc;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  fprintf(stderr, "    interface:     %d\n",     aoap_i_desc->bInterfaceNumber);
+  fprintf(stderr, "    endpoint IN:   0x%02X\n", aoap_in_ep_desc->bEndpointAddress);
+  fprintf(stderr, "    endpoint OUT:  0x%02X\n", aoap_out_ep_desc->bEndpointAddress);
+
+  if(usb_device_claim_interface(usb_device, aoap_i_desc->bInterfaceNumber))
+  {
+    fprintf(stderr, "interface claim error: %d, %s\n", errno, strerror(errno));
+  }
+  else
+  {
+    fprintf(stderr, "interface claim OK\n");
   }
 }
 
@@ -780,7 +915,10 @@ int main(int argc, char ** argv)
   }
 
   if(bAuto)
+  {
+//    test_usb();
     start_auto();
+  }
 
   if(bStream)
     start_streaming();

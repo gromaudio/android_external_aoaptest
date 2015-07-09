@@ -22,7 +22,7 @@
   #define AA_CH_SEN 3
 
 
-  int iaap_recv_tmo = 20;//25; // 10 doesn't work ? 100 does
+  int iaap_recv_tmo = 50;//25; // 10 doesn't work ? 100 does
   int iaap_send_tmo = 250;
 
 
@@ -764,12 +764,13 @@ http://www.cisco.com/c/en/us/support/docs/security-vpn/secure-socket-layer-ssl/1
         logd ("len_remain: %d < len: %d  need: %d  !!!!!!!!!", len_remain, len, need);
         //ms_sleep (50);  // ?? Wait a bit for data to come ??
         int need_ret = hu_aap_usb_recv (& buf [len_remain], need, iaap_recv_tmo); // Get Rx packet from USB
-                                                                        // Length remaining for all sub-packets plus 4/8 byte headers
+/*                                                                        // Length remaining for all sub-packets plus 4/8 byte headers
         if (need_ret != need) {
           loge ("Recv need_ret: %d", need_ret);
           hu_aap_stop ();
           return (-1);
         }
+*/
         len_remain = len;
       }
 
