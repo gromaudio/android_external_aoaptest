@@ -20,8 +20,8 @@ int hu_usb_recv(byte * buf, int len, int tmo)
   int ret = -1;
 
   ret = usb_device_bulk_transfer(usb_device, aoap_in_ep_desc->bEndpointAddress, buf, len, tmo); // milli-second timeout
-  if(len != 65536)
-    fprintf(stderr, "USB recv %d, %d\n", len, ret);
+//  if(len != 65536)
+//    fprintf(stderr, "USB recv %d, %d\n", len, ret);
   if(ret == -1)ret = 0;
 
   return ret;

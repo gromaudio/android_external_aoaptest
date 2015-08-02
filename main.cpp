@@ -40,6 +40,8 @@
 #include <android/native_window.h>
 #include "Utils.h"
 #include <usbhost/usbhost.h>
+#include <binder/IServiceManager.h>
+#include "IVBaseEventService.h"
 
 extern "C" {
 #include "common.h"
@@ -625,6 +627,16 @@ static void start_auto(void)
   struct timeval  tv1, tv2;
   double          elapsedTime;
   size_t          cmd_len;
+  sp<IBinder>             binder = NULL;
+  sp<IVBaseEventService>  vbased_event_service = NULL;
+
+  binder = defaultServiceManager()->getService(String16("vbased"));
+  vbased_event_service = interface_cast<IVBaseEventService>( binder );
+  if( vbased_event_service == NULL )
+  {
+    fprintf(stderr, "Cannot get VBaseEventService interface\n");
+    return;
+  }
 
   frame_counter= 0;
   first_frame  = true;
@@ -634,16 +646,26 @@ static void start_auto(void)
   cmd_len      = 3;
   jni_aa_cmd( cmd_len, (char*)cmd_buf, 0, NULL );
 
+
+  binder = defaultServiceManager()->getService(String16("vbased"));
+  vbased_event_service = interface_cast<IVBaseEventService>( binder );
+
   ProcessState::self()->startThreadPool();
   DataSource::RegisterDefaultSniffers();
   initOutputSurface();
-  TOUCH_init();
+  TOUCH_init(vbased_event_service->getNativeDevPath());
 
-//  gettimeofday( &tv1, NULL );
   while(true)
   {
     cmd_len = TOUCH_getAction(cmd_buf, sizeof(cmd_buf));
+
+    gettimeofday( &tv1, NULL );
     bytes_received = jni_aa_cmd(cmd_len, (char*)cmd_buf, sizeof(res_buf), (char*)res_buf);
+    gettimeofday( &tv2, NULL );
+    elapsedTime = tv2.tv_sec - tv1.tv_sec;
+    elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
+    if(bytes_received > 0 && elapsedTime > 0.05)
+    fprintf(stderr, "Transact %5.3f sec\n", elapsedTime);
 
     if(bytes_received < 0)
     {
@@ -653,8 +675,6 @@ static void start_auto(void)
 
     if(bytes_received > 0)
     {
-//      bytes_written = saveFrame(res_buf, bytes_received);
-//      fprintf(stderr, "-------------------------------frame: %d, %d\n", bytes_received, bytes_written);
       if(first_frame)
       {
         initHwCodec(AvccExtraData, sizeof(AvccExtraData));
@@ -664,20 +684,9 @@ static void start_auto(void)
       {
         decodeHwFrame(res_buf, bytes_received);
       }
-
-
-//      frame_counter++;
-//      if(frame_counter == 25)
-//      {
-//        gettimeofday( &tv2, NULL );
-//        elapsedTime = tv2.tv_sec - tv1.tv_sec;
-//        elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
-//        fprintf(stderr, "Decoded %d frames in %5.3f sec = %5.2f fps\n", frame_counter,
-//                                                                        elapsedTime,
-//                                                                        frame_counter/elapsedTime );
-//      }
-
     }
+
+    vbased_event_service->stopAndroidEvents();
   }
 }
 

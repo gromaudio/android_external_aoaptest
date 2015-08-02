@@ -9,7 +9,6 @@
 #include "auto_touch.h"
 
 //--------------------------------------------------------------------------
-#define TOUCH_DEVICE_NAME     "/dev/input/event0"
 #define ACTION_DOWN           0
 #define ACTION_UP             1
 #define ACTION_MOVE           2
@@ -38,7 +37,7 @@ int           touchFd;
 TOUCH_EVENT   event;
 
 //--------------------------------------------------------------------------
-void TOUCH_init(void)
+void TOUCH_init(const char* touch_dev_path)
 {
   event.NeedsReport = false;
   event.NewButton   = false;
@@ -46,11 +45,11 @@ void TOUCH_init(void)
   event.X           = 0;
   event.Y           = 0;
 
-  touchFd = open(TOUCH_DEVICE_NAME, O_RDONLY | O_NONBLOCK);
+  touchFd = open(touch_dev_path, O_RDONLY | O_NONBLOCK);
   if(touchFd == -1)
-    fprintf(stderr, "Cannot open input device %s: %d, %s\n", TOUCH_DEVICE_NAME, errno, strerror(errno));
+    fprintf(stderr, "Cannot open input device %s: %d, %s\n", touch_dev_path, errno, strerror(errno));
 
-  fprintf(stderr, "Event device opened: %s\n", TOUCH_DEVICE_NAME);
+  fprintf(stderr, "Event device opened: %s\n", touch_dev_path);
 }
 
 //--------------------------------------------------------------------------

@@ -22,7 +22,7 @@
   #define AA_CH_SEN 3
 
 
-  int iaap_recv_tmo = 50;//25; // 10 doesn't work ? 100 does
+  int iaap_recv_tmo = 10;//25; // 10 doesn't work ? 100 does
   int iaap_send_tmo = 250;
 
 

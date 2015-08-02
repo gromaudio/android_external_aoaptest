@@ -55,7 +55,7 @@ LOCAL_SRC_FILES:= \
         src/android_auto/hu.c \
         src/android_auto/hu_uti.c \
         src/android_auto/hu_aap.c \
-        src/android_auto/hu_usb_android.c \
+        src/android_auto/hu_usb.c \
         src/android_auto/hu_ssl.c \
         src/android_auto/hu_aad.c
 
@@ -69,10 +69,12 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/include \
         $(LOCAL_PATH)/src \
         $(LOCAL_PATH)/src/android_auto \
-        $(LOCAL_PATH)/utils
+        $(LOCAL_PATH)/utils \
+        system/vbased
 
 LOCAL_STATIC_LIBRARIES := \
-        libcrypto
+        libcrypto \
+        libvbased
 
 LOCAL_SHARED_LIBRARIES := \
         libc \
