@@ -14,7 +14,10 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <utils/StrongPointer.h>
+#include <utils/Timers.h>
 #include "libusb/libusb.h"
 #include "pcm_stream.h"
 #include "auto_touch.h"
@@ -96,6 +99,7 @@ typedef struct {
 
 //-----------------------------------------------------------------------------
 const uint16_t aSupportedPIDs[] = { 0x2d02, 0x2d03, 0x2d04, 0x2d05 };
+pthread_t      gDisplayThread;
 
 //-----------------------------------------------------------------------------
 extern "C" {
@@ -306,7 +310,7 @@ void start_streaming(void)
   const DEVICE_BROWSER_INTERFACE  *pAndroidBrowser;
   ANDROID_BROWSER_STATE            AndroidBrowserState;
   ANDROID_COMMAND_STATE            AndroidCommandState;
-  sp<PcmStream>                    pcmstream = new PcmStream();
+  sp<PcmStream>                    pcmstream = new PcmStream( 1, 0 );
 
   ACOMMAND_Init();
   ABROWSER_Init();
@@ -562,10 +566,10 @@ static void initHwCodec(uint8_t *configData, size_t configDataSize)
 static void decodeHwFrame(uint8_t *inBuff, size_t inBuffSize)
 {
   status_t        res;
-  BufferInfo      info;
   size_t          index;
 
-  do{
+  for(;;)
+  {
     res = gCodec->dequeueInputBuffer( &index, 1ll );
     if( res == OK )
     {
@@ -581,7 +585,17 @@ static void decodeHwFrame(uint8_t *inBuff, size_t inBuffSize)
                                 0 );
       break;
     }
+  }
+}
 
+//--------------------------------------------------------------------------
+static void* displayThread(void* params)
+{
+  status_t        res;
+  BufferInfo      info;
+
+  for(;;)
+  {
     res = gCodec->dequeueOutputBuffer( &info.mIndex,
                                        &info.mOffset,
                                        &info.mSize,
@@ -591,7 +605,7 @@ static void decodeHwFrame(uint8_t *inBuff, size_t inBuffSize)
     {
       gCodec->renderOutputBufferAndRelease( info.mIndex );
     }
-  }while( true );
+  }
 }
 
 //--------------------------------------------------------------------------
@@ -624,11 +638,11 @@ static void start_auto(void)
                   bytes_written,
                   frame_counter;
   bool            first_frame;
-  struct timeval  tv1, tv2;
-  double          elapsedTime;
   size_t          cmd_len;
+
   sp<IBinder>             binder = NULL;
   sp<IVBaseEventService>  vbased_event_service = NULL;
+  sp<PcmStream>           pcmstream = new PcmStream( 1, 0 );
 
   binder = defaultServiceManager()->getService(String16("vbased"));
   vbased_event_service = interface_cast<IVBaseEventService>( binder );
@@ -654,18 +668,13 @@ static void start_auto(void)
   DataSource::RegisterDefaultSniffers();
   initOutputSurface();
   TOUCH_init(vbased_event_service->getNativeDevPath());
+  pcmstream->start();
 
   while(true)
   {
     cmd_len = TOUCH_getAction(cmd_buf, sizeof(cmd_buf));
 
-    gettimeofday( &tv1, NULL );
     bytes_received = jni_aa_cmd(cmd_len, (char*)cmd_buf, sizeof(res_buf), (char*)res_buf);
-    gettimeofday( &tv2, NULL );
-    elapsedTime = tv2.tv_sec - tv1.tv_sec;
-    elapsedTime += ( tv2.tv_usec - tv1.tv_usec ) / 1000000.0f;
-    if(bytes_received > 0 && elapsedTime > 0.05)
-    fprintf(stderr, "Transact %5.3f sec\n", elapsedTime);
 
     if(bytes_received < 0)
     {
@@ -678,6 +687,14 @@ static void start_auto(void)
       if(first_frame)
       {
         initHwCodec(AvccExtraData, sizeof(AvccExtraData));
+        if( pthread_create( &gDisplayThread,
+                      NULL,
+                      displayThread,
+                      NULL ) )
+        {
+          fprintf(stderr, "Cannot create display thread.\n");
+          break;
+        }
         first_frame = false;
       }
       else

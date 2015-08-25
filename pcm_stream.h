@@ -12,7 +12,7 @@ using namespace android;
 class PcmStream : public Thread
 {
 public:
-  PcmStream();
+  PcmStream( unsigned int card = 0, unsigned int device = 0 );
   ~PcmStream();
 
   void start();
@@ -37,6 +37,8 @@ private:
   char                        *mBuffer;
   uint32_t                     mBufferSize;
   bool                         mStreamingActive;
+  unsigned int                 mCard;
+  unsigned int                 mDevice;
   sp<AudioTrack>               mAudioTrack;
 };
 
