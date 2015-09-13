@@ -42,10 +42,9 @@ LOCAL_CFLAGS      := -Wno-return-type \
                      -Wno-type-limits
 
 LOCAL_SRC_FILES:= \
-        main.cpp \
-        pcm_stream.cpp \
-        messageQueue.cpp \
-        auto_touch.cpp \
+        main_test.cpp \
+        AndroidAuto.cpp \
+        AndroidAutoTouch.cpp \
         utils/Utils.cpp \
         src/common.c \
         src/os.c \
@@ -70,7 +69,8 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/src \
         $(LOCAL_PATH)/src/android_auto \
         $(LOCAL_PATH)/utils \
-        system/vbased
+        system/vbased/uart-service \
+        system/vbased/common
 
 LOCAL_STATIC_LIBRARIES := \
         libcrypto \

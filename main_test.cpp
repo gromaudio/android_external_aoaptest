@@ -13,38 +13,16 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <utils/StrongPointer.h>
 #include <utils/Timers.h>
-#include "libusb/libusb.h"
-#include "pcm_stream.h"
-#include "auto_touch.h"
-
-#include <binder/IServiceManager.h>
-#include <binder/ProcessState.h>
-#include <media/ICrypto.h>
-#include <media/stagefright/foundation/ABuffer.h>
-#include <media/stagefright/foundation/ADebug.h>
-#include <media/stagefright/foundation/ALooper.h>
-#include <media/stagefright/foundation/AMessage.h>
-#include <media/stagefright/foundation/AString.h>
-#include <media/stagefright/DataSource.h>
-#include <media/stagefright/MediaCodec.h>
-#include <media/stagefright/MediaCodecList.h>
-#include <media/stagefright/MediaDefs.h>
-#include <media/stagefright/MetaData.h>
-#include <media/stagefright/NativeWindowWrapper.h>
-#include <gui/ISurfaceComposer.h>
-#include <gui/SurfaceComposerClient.h>
-#include <gui/Surface.h>
-#include <ui/DisplayInfo.h>
-#include <android/native_window.h>
-#include "Utils.h"
 #include <usbhost/usbhost.h>
-#include <binder/IServiceManager.h>
-#include "IVBaseEventService.h"
+#include "libusb/libusb.h"
+#include "AndroidAuto.h"
+#include "pcm_stream.h"
 
 extern "C" {
 #include "common.h"
@@ -52,8 +30,6 @@ extern "C" {
 #include "interface/browser_interface.h"
 #include "interface/android/android_browser.h"
 #include "interface/android/android_commands.h"
-
-#include "android_auto/hu.h"
 }
 
 using namespace android;
@@ -89,17 +65,9 @@ using namespace android;
 
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
 
-typedef struct {
-  size_t   mIndex;
-  size_t   mOffset;
-  size_t   mSize;
-  int64_t  mPresentationTimeUs;
-  uint32_t mFlags;
-}BufferInfo;
-
 //-----------------------------------------------------------------------------
 const uint16_t aSupportedPIDs[] = { 0x2d02, 0x2d03, 0x2d04, 0x2d05 };
-pthread_t      gDisplayThread;
+bool gQuit;
 
 //-----------------------------------------------------------------------------
 extern "C" {
@@ -299,6 +267,12 @@ acc_exit:
 }
 
 //--------------------------------------------------------------------------
+static void got_signal( int )
+{
+  gQuit = true;
+}
+
+//--------------------------------------------------------------------------
 void start_streaming(void)
 {
   int                              nodesCount,
@@ -310,8 +284,16 @@ void start_streaming(void)
   const DEVICE_BROWSER_INTERFACE  *pAndroidBrowser;
   ANDROID_BROWSER_STATE            AndroidBrowserState;
   ANDROID_COMMAND_STATE            AndroidCommandState;
-  sp<PcmStream>                    pcmstream = new PcmStream( 1, 0 );
+  sp<PcmStream>                    pcm_stream = new PcmStream( 2, 0 );
+  struct sigaction                 sa;
 
+  gQuit = false;
+  memset( &sa, 0, sizeof( sa ) );
+  sa.sa_handler = got_signal;
+  sigfillset( &sa.sa_mask );
+  sigaction( SIGINT, &sa, NULL );
+
+  pcm_stream->setSampleRate( 44100 );
   ACOMMAND_Init();
   ABROWSER_Init();
   if( OK == Bulk_DriveInsert())
@@ -327,386 +309,101 @@ void start_streaming(void)
     fprintf(stderr, "  g id     - scan group by its Id.\n");
     fprintf(stderr, "  g id idx - scan group by its Id and item index.\n");
 
-    for(;;)
+    while( !gQuit )
     {
+      usleep(10000);
+
       input = fgets(inputBuffer, sizeof(inputBuffer), stdin);
-      if(input == NULL)
+      if(input != NULL)
       {
-        usleep(10000);
-        continue;
-      }
+        switch(input[0])
+        {
+          case '1':
+            pcm_stream->start();
+            break;
 
-      switch(input[0])
-      {
-        case '1':
-          pcmstream->start();
-          break;
+          case '2':
+            pcm_stream->stop();
+            break;
 
-        case '2':
-          pcmstream->stop();
-          break;
+          case 'r':
+            fprintf(stderr, "Scan root:\n");
 
-        case 'r':
-          fprintf(stderr, "Scan root:\n");
-
-          pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
-          pAndroidBrowser->getCount(&nodesCount, &itemsCount);
-          fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
-
-          for(int i = 0; i < nodesCount; i++)
-          {
-            pAndroidBrowser->getNode(i, &item);
-            fprintf(stderr, "  %s\n", item.name);
-          }
-          break;
-
-        case 'g':
-          if(strlen(input) >= 3)
-          {
-            fprintf(stderr, "Scan group %d:\n", input[2] - 0x30);
             pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
             pAndroidBrowser->getCount(&nodesCount, &itemsCount);
-            pAndroidBrowser->setNode(input[2] - 0x30);
-            pAndroidBrowser->getCount(&nodesCount, &itemsCount);
             fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+
             for(int i = 0; i < nodesCount; i++)
             {
               pAndroidBrowser->getNode(i, &item);
               fprintf(stderr, "  %s\n", item.name);
             }
-          }
+            break;
 
-          if(strlen(input) >= 5)
-          {
-            pAndroidBrowser->setNode(input[4] - 0x30);
-            pAndroidBrowser->getCount(&nodesCount, &itemsCount);
-            fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
-            for(int i = 0; i < itemsCount; i++)
+          case 'g':
+            if(strlen(input) >= 3)
             {
-              pAndroidBrowser->getItem(i, &item);
-              fprintf(stderr, "  %s\n", item.name);
+              fprintf(stderr, "Scan group %d:\n", input[2] - 0x30);
+              pAndroidBrowser->setNode(BROWSER_NODE_ROOT);
+              pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+              pAndroidBrowser->setNode(input[2] - 0x30);
+              pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+              fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+              for(int i = 0; i < nodesCount; i++)
+              {
+                pAndroidBrowser->getNode(i, &item);
+                fprintf(stderr, "  %s\n", item.name);
+              }
             }
-          }
-          break;
 
-        default:
-          break;
-      }
-    }
-  }
-}
+            if(strlen(input) >= 5)
+            {
+              pAndroidBrowser->setNode(input[4] - 0x30);
+              pAndroidBrowser->getCount(&nodesCount, &itemsCount);
+              fprintf(stderr, "Nodes %d, Items %d\n", nodesCount, itemsCount);
+              for(int i = 0; i < itemsCount; i++)
+              {
+                pAndroidBrowser->getItem(i, &item);
+                fprintf(stderr, "  %s\n", item.name);
+              }
+            }
+            break;
 
-//--------------------------------------------------------------------------
-unsigned char cmd_buf[256];
-unsigned char res_buf[65536 * 16];
-
-sp<SurfaceComposerClient> gComposerClient;
-sp<SurfaceControl>        gControl;
-sp<Surface>               gSurface;
-sp<NativeWindowWrapper>   gNativeWindowWrapper;
-struct ANativeWindow     *gNativeWindow;
-sp<MediaCodec>            gCodec;
-sp<ALooper>               gLooper;
-Vector<sp<ABuffer> >      gInBuffers;
-Vector<sp<ABuffer> >      gOutBuffers;
-
-// --------------------------------------------------------------------------------
-static void initOutputSurface( void )
-{
-  gComposerClient = new SurfaceComposerClient;
-  if( OK == gComposerClient->initCheck() )
-  {
-    DisplayInfo info;
-    sp<IBinder> display( SurfaceComposerClient::getBuiltInDisplay(
-                         ISurfaceComposer::eDisplayIdMain ) );
-
-    SurfaceComposerClient::getDisplayInfo( display, &info );
-    size_t displayWidth  = info.w;
-    size_t displayHeight = info.h;
-
-    fprintf( stderr, "display is %d x %d\n", displayWidth, displayHeight );
-
-    gControl = gComposerClient->createSurface( String8("A Surface"),
-                                               displayWidth,
-                                               displayHeight,
-                                               PIXEL_FORMAT_RGB_565,
-                                               0 );
-
-    if( ( gControl != NULL ) && ( gControl->isValid() ) )
-    {
-      SurfaceComposerClient::openGlobalTransaction();
-      if( ( OK == gControl->setLayer( INT_MAX ) ) &&
-          ( OK == gControl->show() ) )
-      {
-        SurfaceComposerClient::closeGlobalTransaction();
-        gSurface = gControl->getSurface();
-      }
-    }
-  }
-
-  if( gSurface == NULL )
-  {
-    fprintf( stderr, "Screen surface create error\n" );
-  }
-  gNativeWindowWrapper = new NativeWindowWrapper( gSurface );
-  gNativeWindow = gSurface.get();
-
-  //native_window_set_buffers_transform( gNativeWindow, NATIVE_WINDOW_TRANSFORM_FLIP_V );
-  native_window_set_buffers_format( gNativeWindow, HAL_PIXEL_FORMAT_YV12 );
-  native_window_set_buffers_dimensions( gNativeWindow, 800, 480 );
-  native_window_set_scaling_mode( gNativeWindow, NATIVE_WINDOW_SCALING_MODE_SCALE_TO_WINDOW );
-
-  fprintf( stderr, "Screen surface created\n" );
-  fprintf( stderr, "Screen surface %s\n", (gSurface->isValid(gSurface)?"valid":"invalid") );
-}
-
-//-----------------------------------------------------------------------------
-uint8_t AvccExtraData[] = {
-	0x01, 0x42, 0x80, 0x1F, 0xFF, 0xE1, 0x00, 0x0D, 0x67, 0x42, 0x80, 0x1F, 0xDA, 0x03, 0x20, 0xF6,
-	0x80, 0x6D, 0x0A, 0x13, 0x50, 0x01, 0x00, 0x04, 0x68, 0xCE, 0x06, 0xE2
-};
-
-//-----------------------------------------------------------------------------
-static void initHwCodec(uint8_t *configData, size_t configDataSize)
-{
-  sp<AMessage> format;
-  sp<MetaData> meta = new MetaData;
-  status_t     res;
-
-  gLooper = new ALooper;
-  gLooper->start();
-
-  gCodec = MediaCodec::CreateByType( gLooper, "video/avc", false );
-  if( gCodec != NULL )
-  {
-    fprintf( stderr, "Codec created\n" );
-  }
-
-  meta->clear();
-  meta->setCString( kKeyMIMEType,         "video/avc" );
-  meta->setInt32(   kKeyTrackID,          1 );
-  meta->setInt32(   kKeyWidth,            800 );
-  meta->setInt32(   kKeyHeight,           480 );
-  meta->setInt32(   kKeyDisplayWidth,     800 );
-  meta->setInt32(   kKeyDisplayHeight,    480 );
-  meta->setData(    kKeyAVCC, kTypeAVCC,  configData, configDataSize );
-  meta->dumpToLog();
-  convertMetaDataToMessage( meta, &format );
-
-  res = gCodec->configure( format, gNativeWindowWrapper->getSurfaceTextureClient(), NULL, 0 );
-  if( res != OK )
-  {
-    fprintf( stderr, "Codec configure error: %d\n", res );
-    exit(1);
-  }
-
-  res = gCodec->start();
-  if( res != OK )
-  {
-    fprintf( stderr, "Codec start error: %d\n", res );
-    exit(1);
-  }
-
-  res = gCodec->getInputBuffers( &gInBuffers );
-  if( res != OK )
-  {
-    fprintf( stderr, "Codec get input buffers error: %d\n", res );
-    exit(1);
-  }
-
-  res = gCodec->getOutputBuffers( &gOutBuffers );
-  if( res != OK )
-  {
-    fprintf( stderr, "Codec get output buffers error: %d\n", res );
-    exit(1);
-  }
-
-  sp<ABuffer> srcBuffer;
-  size_t j = 0;
-  while( format->findBuffer( StringPrintf("csd-%d", j).c_str(), &srcBuffer ) )
-  {
-    size_t index;
-    res = gCodec->dequeueInputBuffer( &index, -1ll );
-    if( res != OK )
-    {
-      fprintf( stderr, "Dequeue error\n" );
-    }
-
-    const sp<ABuffer> &dstBuffer = gInBuffers.itemAt( index );
-
-    dstBuffer->setRange( 0, srcBuffer->size() );
-    memcpy( dstBuffer->data(), srcBuffer->data(), srcBuffer->size() );
-
-    fprintf( stderr, "CSD data size: %d\n", srcBuffer->size() );
-    for( size_t i = 0; i < srcBuffer->size(); i++ )
-    {
-      fprintf( stderr, "0x%02X ", srcBuffer->data()[ i ] );
-      if( !( ( i + 1 ) % 8) )
-        fprintf( stderr, "\n" );
-    }
-    fprintf(stderr, "\n" );
-
-    res = gCodec->queueInputBuffer( index,
-                                    0,
-                                    dstBuffer->size(),
-                                    0ll,
-                                    MediaCodec::BUFFER_FLAG_CODECCONFIG );
-    if( res != OK )
-    {
-      fprintf( stderr, "Queue error\n" );
-    }
-
-    j++;
-  }
-
-  fprintf( stderr, "Codec init OK.\n" );
-}
-
-//--------------------------------------------------------------------------
-static void decodeHwFrame(uint8_t *inBuff, size_t inBuffSize)
-{
-  status_t        res;
-  size_t          index;
-
-  for(;;)
-  {
-    res = gCodec->dequeueInputBuffer( &index, 1ll );
-    if( res == OK )
-    {
-      const sp<ABuffer> &buffer = gInBuffers.itemAt( index );
-
-      buffer->setRange( 0, inBuffSize );
-      memcpy( (uint8_t*)buffer->data(), inBuff, inBuffSize );
-
-      gCodec->queueInputBuffer( index,
-                                buffer->offset(),
-                                buffer->size(),
-                                0ll,
-                                0 );
-      break;
-    }
-  }
-}
-
-//--------------------------------------------------------------------------
-static void* displayThread(void* params)
-{
-  status_t        res;
-  BufferInfo      info;
-
-  for(;;)
-  {
-    res = gCodec->dequeueOutputBuffer( &info.mIndex,
-                                       &info.mOffset,
-                                       &info.mSize,
-                                       &info.mPresentationTimeUs,
-                                       &info.mFlags);
-    if( res == OK )
-    {
-      gCodec->renderOutputBufferAndRelease( info.mIndex );
-    }
-  }
-}
-
-//--------------------------------------------------------------------------
-static size_t saveFrame(uint8_t *frameData, size_t frameDataSize)
-{
-  static int  file_counter  = 0;
-  size_t      bytes_written = 0;
-  char        file_name[100];
-  FILE        *file;
-
-  sprintf(file_name, "/boot/auto/AnnexB/auto_%03d.raw", file_counter);
-  file = fopen(file_name, "wb");
-  if(file != NULL)
-  {
-    bytes_written = fwrite(frameData, sizeof(uint8_t), frameDataSize, file);
-    fclose(file);
-    file_counter++;
-  }
-  else
-  {
-    fprintf(stderr, "Error opening file %s: %d, %s\n", file_name, errno, strerror(errno));
-  }
-  return bytes_written;
-}
-
-//--------------------------------------------------------------------------
-static void start_auto(void)
-{
-  int             bytes_received,
-                  bytes_written,
-                  frame_counter;
-  bool            first_frame;
-  size_t          cmd_len;
-
-  sp<IBinder>             binder = NULL;
-  sp<IVBaseEventService>  vbased_event_service = NULL;
-  sp<PcmStream>           pcmstream = new PcmStream( 1, 0 );
-
-  binder = defaultServiceManager()->getService(String16("vbased"));
-  vbased_event_service = interface_cast<IVBaseEventService>( binder );
-  if( vbased_event_service == NULL )
-  {
-    fprintf(stderr, "Cannot get VBaseEventService interface\n");
-    return;
-  }
-
-  frame_counter= 0;
-  first_frame  = true;
-  cmd_buf[0]   = 121;
-  cmd_buf[1]   = 0x81;
-  cmd_buf[2]   = 0x02;
-  cmd_len      = 3;
-  jni_aa_cmd( cmd_len, (char*)cmd_buf, 0, NULL );
-
-
-  binder = defaultServiceManager()->getService(String16("vbased"));
-  vbased_event_service = interface_cast<IVBaseEventService>( binder );
-
-  ProcessState::self()->startThreadPool();
-  DataSource::RegisterDefaultSniffers();
-  initOutputSurface();
-  TOUCH_init(vbased_event_service->getNativeDevPath());
-  pcmstream->start();
-
-  while(true)
-  {
-    cmd_len = TOUCH_getAction(cmd_buf, sizeof(cmd_buf));
-
-    bytes_received = jni_aa_cmd(cmd_len, (char*)cmd_buf, sizeof(res_buf), (char*)res_buf);
-
-    if(bytes_received < 0)
-    {
-      fprintf(stderr, "Android auto error: %s\n", strerror(bytes_received));
-      break;
-    }
-
-    if(bytes_received > 0)
-    {
-      if(first_frame)
-      {
-        initHwCodec(AvccExtraData, sizeof(AvccExtraData));
-        if( pthread_create( &gDisplayThread,
-                      NULL,
-                      displayThread,
-                      NULL ) )
-        {
-          fprintf(stderr, "Cannot create display thread.\n");
-          break;
+          default:
+            break;
         }
-        first_frame = false;
-      }
-      else
-      {
-        decodeHwFrame(res_buf, bytes_received);
       }
     }
-
-    vbased_event_service->stopAndroidEvents();
+    pcm_stream->stop();
+    usleep( 10000 );
   }
 }
 
+//--------------------------------------------------------------------------
+void start_auto( void )
+{
+  sp<PcmStream> pcm_stream = new PcmStream( 2, 0 );
+  struct sigaction sa;
+
+  gQuit = false;
+  memset( &sa, 0, sizeof( sa ) );
+  sa.sa_handler = got_signal;
+  sigfillset( &sa.sa_mask );
+  sigaction( SIGINT, &sa, NULL );
+
+  pcm_stream->setSampleRate( 44100 );
+  pcm_stream->start();
+
+  if( OK != AUTO_init() )
+    return;
+
+  while( !gQuit )
+    if( OK != AUTO_tick() )
+      break;
+
+  pcm_stream->stop();
+  usleep( 10000 );
+}
 
 //--------------------------------------------------------------------------
 int usb_device_added(const char *dev_name, void *client_data)
@@ -941,10 +638,7 @@ int main(int argc, char ** argv)
   }
 
   if(bAuto)
-  {
-//    test_usb();
     start_auto();
-  }
 
   if(bStream)
     start_streaming();

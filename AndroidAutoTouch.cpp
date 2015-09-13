@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <linux/input.h>
-#include "auto_touch.h"
+#include "AndroidAutoTouch.h"
 
 //--------------------------------------------------------------------------
 #define ACTION_DOWN           0
