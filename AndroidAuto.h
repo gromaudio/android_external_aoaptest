@@ -8,5 +8,6 @@ using namespace android;
 
 status_t AUTO_init( void );
 status_t AUTO_tick( void );
+void     AUTO_exit( void );
 
 #endif

@@ -96,3 +96,65 @@ LOCAL_SHARED_LIBRARIES := \
         libssl
 
 include $(BUILD_EXECUTABLE)
+
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE      := aauto
+LOCAL_CFLAGS      := -Wno-return-type \
+                     -Wno-parentheses \
+                     -Wno-missing-braces \
+                     -Wno-sign-compare \
+                     -Wno-type-limits
+
+LOCAL_SRC_FILES:= \
+        main_auto.cpp \
+        AndroidAuto.cpp \
+        AndroidAutoTouch.cpp \
+        utils/Utils.cpp \
+        src/intercom/usbhost_bulk.c \
+        src/android_auto/hu.c \
+        src/android_auto/hu_uti.c \
+        src/android_auto/hu_aap.c \
+        src/android_auto/hu_usb.c \
+        src/android_auto/hu_ssl.c \
+        src/android_auto/hu_aad.c
+
+LOCAL_C_INCLUDES += \
+        bionic \
+        bionic/libstdc++/include \
+        external/stlport/stlport \
+        external/tinyalsa/include \
+        external/libusb/libusb \
+        external/libusb \
+        $(LOCAL_PATH)/include \
+        $(LOCAL_PATH)/src \
+        $(LOCAL_PATH)/src/android_auto \
+        $(LOCAL_PATH)/utils \
+        system/vbased/uart-service \
+        system/vbased/common
+
+LOCAL_STATIC_LIBRARIES := \
+        libcrypto \
+        libvbased
+
+LOCAL_SHARED_LIBRARIES := \
+        libc \
+        libdl \
+        libcutils \
+        libutils \
+        libstlport \
+        libmedia \
+        libtinyalsa \
+        libmedia \
+        libbinder \
+        libgui \
+        libusb \
+        libusbhost \
+        libui \
+        libstagefright_foundation \
+        libstagefright \
+        libg2d \
+        libssl
+
+include $(BUILD_EXECUTABLE)

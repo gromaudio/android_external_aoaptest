@@ -216,6 +216,8 @@ int     LIBUSB_CALL libusb_bulk_transfer          (libusb_device_handle *dev_han
     while (continue_transfer) {
       usb_err = libusb_bulk_transfer (iusb_dev_hndl, ep, buf, len, & bytes_xfrd, tmo);
 
+loge ("err: %d", usb_err);
+
       continue_transfer = 0;
       if (bytes_xfrd > 0)
         total_bytes_xfrd += bytes_xfrd;

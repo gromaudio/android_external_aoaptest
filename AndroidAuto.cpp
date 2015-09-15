@@ -1,3 +1,6 @@
+
+#define LOG_TAG "AndroidAuto"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +55,7 @@ typedef struct {
 unsigned char cmd_buf[256];
 unsigned char res_buf[65536 * 16];
 
+bool                      gStopDisplayThread;
 pthread_t                 gDisplayThread;
 sp<SurfaceComposerClient> gComposerClient;
 sp<SurfaceControl>        gControl;
@@ -252,7 +256,7 @@ static void* displayThread( void* params )
   status_t        res;
   BufferInfo      info;
 
-  for(;;)
+  while( !gStopDisplayThread )
   {
     res = gCodec->dequeueOutputBuffer( &info.mIndex,
                                        &info.mOffset,
@@ -290,6 +294,35 @@ static size_t saveFrame( uint8_t *frameData, size_t frameDataSize )
 }
 
 //-------------------------------------------------------------------------------------------------
+void AUTO_exit( void )
+{
+  void *res;
+
+  cmd_buf[ 0 ]   = 0x00;
+  cmd_buf[ 1 ]   = 0x0b;
+  cmd_buf[ 2 ]   = 0x00;
+  cmd_buf[ 3 ]   = 0x04;
+  cmd_buf[ 4 ]   = 0x00;
+  cmd_buf[ 5 ]   = 15;
+  cmd_buf[ 6 ]   = 0x08;
+  cmd_buf[ 7 ]   = 0x00;
+  jni_aa_cmd( 8, (char*)cmd_buf, 0, NULL );
+
+  usleep( 10000 );
+
+  gStopDisplayThread = true;
+  if( pthread_join( gDisplayThread, &res ) )
+  {
+    ALOGE( "Error terminating display thread: %s", strerror( errno ) );
+  }
+  ALOGD( "Display thread terminated" );
+
+  gCodec->stop();
+  gCodec->release();
+}
+
+
+//-------------------------------------------------------------------------------------------------
 status_t AUTO_init( void )
 {
   status_t                res;
@@ -319,6 +352,7 @@ status_t AUTO_init( void )
   if( res != OK )
     return res;
 
+  gStopDisplayThread = false;
   if( pthread_create( &gDisplayThread,
                       NULL,
                       displayThread,
@@ -327,6 +361,7 @@ status_t AUTO_init( void )
     ALOGE( "Cannot create display thread" );
     return UNKNOWN_ERROR;
   }
+
   return OK;
 }
 

@@ -102,7 +102,7 @@ int             elapsedTime;
     }
     int ret = hu_usb_send (buf, len, tmo);
     if (ret < 0 || ret != len) {
-      loge ("Error hu_usb_send() error so stop USB & AAP  ret: %d  len: %d", ret, len);
+      loge ("Error hu_usb_send() error so stop USB & AAP  ret: %d  len: %d, %d", ret, len, errno);
       hu_aap_stop (); 
       return (-1);
     }

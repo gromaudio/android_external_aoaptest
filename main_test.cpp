@@ -401,6 +401,7 @@ void start_auto( void )
     if( OK != AUTO_tick() )
       break;
 
+  AUTO_exit();
   pcm_stream->stop();
   usleep( 10000 );
 }
