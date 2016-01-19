@@ -21,15 +21,15 @@ LOCAL_MODULE_PATH     := system/lib
 LOCAL_SRC_FILES       := src/android_auto/libs/libcrypto.a
 include $(BUILD_PREBUILT)
 
-#include $(CLEAR_VARS)
-#LOCAL_MODULE          := libusbnok
-#LOCAL_MODULE_SUFFIX   := .a
-#LOCAL_MODULE_CLASS    := STATIC_LIBRARIES
-#LOCAL_MODULE_TAGS     := eng
-#LOCAL_PRELINK_MODULE  := false
-#LOCAL_MODULE_PATH     := system/lib
-#LOCAL_SRC_FILES       := src/android_auto/libs/libusbnok.a
-#include $(BUILD_PREBUILT)
+include $(CLEAR_VARS)
+LOCAL_MODULE          := libusbnok
+LOCAL_MODULE_SUFFIX   := .a
+LOCAL_MODULE_CLASS    := STATIC_LIBRARIES
+LOCAL_MODULE_TAGS     := eng
+LOCAL_PRELINK_MODULE  := false
+LOCAL_MODULE_PATH     := system/lib
+LOCAL_SRC_FILES       := src/android_auto/libs/libusbnok.a
+include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
 
@@ -39,7 +39,8 @@ LOCAL_CFLAGS      := -Wno-return-type \
                      -Wno-parentheses \
                      -Wno-missing-braces \
                      -Wno-sign-compare \
-                     -Wno-type-limits
+                     -Wno-type-limits \
+                     -Wno-unused-parameter
 
 LOCAL_SRC_FILES:= \
         main_test.cpp \
@@ -70,11 +71,13 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/src/android_auto \
         $(LOCAL_PATH)/utils \
         system/vbased/uart-service \
-        system/vbased/common
+        system/vbased/common \
+        $(TOP)/frameworks/native/include/media/openmax
 
 LOCAL_STATIC_LIBRARIES := \
         libcrypto \
-        libvbased
+        libvbased \
+        libusbnok
 
 LOCAL_SHARED_LIBRARIES := \
         libc \
@@ -87,12 +90,10 @@ LOCAL_SHARED_LIBRARIES := \
         libmedia \
         libbinder \
         libgui \
-        libusb \
         libusbhost \
         libui \
         libstagefright_foundation \
         libstagefright \
-        libg2d \
         libssl
 
 include $(BUILD_EXECUTABLE)
@@ -105,7 +106,8 @@ LOCAL_CFLAGS      := -Wno-return-type \
                      -Wno-parentheses \
                      -Wno-missing-braces \
                      -Wno-sign-compare \
-                     -Wno-type-limits
+                     -Wno-type-limits \
+                     -Wno-unused-parameter
 
 LOCAL_SRC_FILES:= \
         main_auto.cpp \
@@ -132,11 +134,13 @@ LOCAL_C_INCLUDES += \
         $(LOCAL_PATH)/src/android_auto \
         $(LOCAL_PATH)/utils \
         system/vbased/uart-service \
-        system/vbased/common
+        system/vbased/common \
+        $(TOP)/frameworks/native/include/media/openmax
 
 LOCAL_STATIC_LIBRARIES := \
         libcrypto \
-        libvbased
+        libvbased \
+        libusbnok
 
 LOCAL_SHARED_LIBRARIES := \
         libc \
@@ -149,12 +153,10 @@ LOCAL_SHARED_LIBRARIES := \
         libmedia \
         libbinder \
         libgui \
-        libusb \
         libusbhost \
         libui \
         libstagefright_foundation \
         libstagefright \
-        libg2d \
         libssl
 
 include $(BUILD_EXECUTABLE)
