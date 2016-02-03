@@ -137,3 +137,36 @@
       logd ("res_len: %d", res_len);
     return (res_len);
   }
+
+  JNIEXPORT jint Java_ca_yyx_hu_hu_1tra_native_1aa_1cmd (JNIEnv * env, jobject thiz, jint cmd_len, jbyteArray cmd_buf, jint res_len, jbyteArray res_buf) {
+
+    if (ena_log_extra)
+      logd ("cmd_buf: %p  cmd_len: %d  res_buf: %p  res_len: %d", cmd_buf, cmd_len,  res_buf, res_len);
+
+    jbyte * aa_cmd_buf          = NULL;
+    jbyte * aa_res_buf          = NULL;
+
+    if (cmd_buf == NULL) {
+      loge ("cmd_buf == NULL");
+      return (-1);
+    }
+
+    if (res_buf == NULL) {
+      loge ("res_buf == NULL");
+      return (-1);
+    }
+
+    aa_cmd_buf = (*env)->GetByteArrayElements (env, cmd_buf, NULL);
+    aa_res_buf = (*env)->GetByteArrayElements (env, res_buf, NULL);
+
+    int len = jni_aa_cmd (cmd_len, aa_cmd_buf, res_len, aa_res_buf);
+
+    if (cmd_buf != NULL)
+      (*env)->ReleaseByteArrayElements (env, cmd_buf, aa_cmd_buf, 0);
+
+    if (res_buf != NULL)
+      (*env)->ReleaseByteArrayElements (env, res_buf, aa_res_buf, 0);
+
+    return (len);
+  }
+

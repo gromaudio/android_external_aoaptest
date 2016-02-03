@@ -15,6 +15,7 @@
 #include <utils/StrongPointer.h>
 #include <binder/IServiceManager.h>
 #include <binder/ProcessState.h>
+#include <media/AudioTrack.h>
 #include <media/ICrypto.h>
 #include <media/stagefright/foundation/ABuffer.h>
 #include <media/stagefright/foundation/ADebug.h>
@@ -67,6 +68,7 @@ sp<ALooper>               gLooper;
 Vector<sp<ABuffer> >      gInBuffers;
 Vector<sp<ABuffer> >      gOutBuffers;
 sp<IVBaseEventService>    gVBasedEventService;
+sp<AudioTrack>            gAudioTrack;
 
 // ------------------------------------------------------------------------------------------------
 static status_t initOutputSurface( void )
@@ -84,7 +86,7 @@ static status_t initOutputSurface( void )
 
     ALOGE( "display is %d x %d", displayWidth, displayHeight );
 
-    gControl = gComposerClient->createSurface( String8( "A Surface" ),
+    gControl = gComposerClient->createSurface( String8( "Android Auto" ),
                                                displayWidth,
                                                displayHeight,
                                                PIXEL_FORMAT_RGB_565,
@@ -93,7 +95,7 @@ static status_t initOutputSurface( void )
     if( ( gControl != NULL ) && ( gControl->isValid() ) )
     {
       SurfaceComposerClient::openGlobalTransaction();
-      if( ( OK == gControl->setLayer( INT_MAX ) ) &&
+      if( ( OK == gControl->setLayer( 290000 ) ) &&
           ( OK == gControl->show() ) )
       {
         SurfaceComposerClient::closeGlobalTransaction();
@@ -321,6 +323,12 @@ void AUTO_exit( void )
   gCodec->release();
 }
 
+//-------------------------------------------------------------------------------------------------
+static void decodeAudio( uint8_t *inBuff, size_t inBuffSize )
+{
+  if( gAudioTrack != NULL )
+    gAudioTrack->write( inBuff, inBuffSize );
+}
 
 //-------------------------------------------------------------------------------------------------
 status_t AUTO_init( void )
@@ -352,6 +360,22 @@ status_t AUTO_init( void )
   if( res != OK )
     return res;
 
+  gAudioTrack = new AudioTrack( AUDIO_STREAM_MUSIC,
+                                48000,
+                                AUDIO_FORMAT_PCM_16_BIT,
+                                AUDIO_CHANNEL_OUT_STEREO,
+                                0,
+                                AUDIO_OUTPUT_FLAG_NONE,
+                                NULL,
+                                NULL,
+                                0,
+                                0,
+                                AudioTrack::TRANSFER_SYNC,
+                                NULL,
+                                -1 );
+  if( gAudioTrack != NULL )
+    gAudioTrack->start();
+
   gStopDisplayThread = false;
   if( pthread_create( &gDisplayThread,
                       NULL,
@@ -382,7 +406,15 @@ status_t AUTO_tick( void )
   }
 
   if( bytes_received > 0 )
-    decodeHwFrame( res_buf, bytes_received );
+  {
+    if( res_buf[0] == 0x00 &&
+        res_buf[1] == 0x00 &&
+        res_buf[2] == 0x00 &&
+        res_buf[3] == 0x01 )
+      decodeHwFrame( res_buf, bytes_received );
+    else
+      decodeAudio( res_buf, bytes_received );
+  }
 
   gVBasedEventService->stopAndroidEvents();
 

@@ -382,7 +382,6 @@ void start_streaming(void)
 //--------------------------------------------------------------------------
 void start_auto( void )
 {
-  sp<PcmStream> pcm_stream = new PcmStream( 2, 0 );
   struct sigaction sa;
 
   gQuit = false;
@@ -391,18 +390,18 @@ void start_auto( void )
   sigfillset( &sa.sa_mask );
   sigaction( SIGINT, &sa, NULL );
 
-  pcm_stream->setSampleRate( 44100 );
-  pcm_stream->start();
-
   if( OK != AUTO_init() )
+  {
+    fprintf(stderr, "22\n" );
     return;
+  }
 
   while( !gQuit )
+  {
     if( OK != AUTO_tick() )
       break;
-
+  }
   AUTO_exit();
-  pcm_stream->stop();
   usleep( 10000 );
 }
 
