@@ -46,6 +46,7 @@ LOCAL_SRC_FILES:= \
         main_test.cpp \
         AndroidAuto.cpp \
         AndroidAutoTouch.cpp \
+        AndroidAutoMic.cpp \
         utils/Utils.cpp \
         src/common.c \
         src/os.c \
@@ -113,6 +114,7 @@ LOCAL_SRC_FILES:= \
         main_auto.cpp \
         AndroidAuto.cpp \
         AndroidAutoTouch.cpp \
+        AndroidAutoMic.cpp \
         utils/Utils.cpp \
         src/intercom/usbhost_bulk.c \
         src/android_auto/hu.c \

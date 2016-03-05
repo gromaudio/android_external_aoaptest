@@ -11,6 +11,7 @@
 #include <linux/input.h>
 #include "AndroidAuto.h"
 #include "AndroidAutoTouch.h"
+#include "AndroidAutoMic.h"
 
 #include <utils/StrongPointer.h>
 #include <binder/IServiceManager.h>
@@ -53,10 +54,11 @@ typedef struct {
   uint32_t mFlags;
 }BufferInfo;
 
-unsigned char cmd_buf[256];
+unsigned char cmd_buf[2048];
 unsigned char res_buf[65536 * 16];
 
 bool                      gStopDisplayThread;
+bool                      gMicOn;
 pthread_t                 gDisplayThread;
 sp<SurfaceComposerClient> gComposerClient;
 sp<SurfaceControl>        gControl;
@@ -349,6 +351,7 @@ status_t AUTO_init( void )
   cmd_buf[ 2 ]   = 0x02;
   jni_aa_cmd( 3, (char*)cmd_buf, 0, NULL );
 
+  MIC_init();
   TOUCH_init( gVBasedEventService->getNativeDevPath() );
   ProcessState::self()->startThreadPool();
   DataSource::RegisterDefaultSniffers();
@@ -386,6 +389,8 @@ status_t AUTO_init( void )
     return UNKNOWN_ERROR;
   }
 
+  gMicOn = false;
+
   return OK;
 }
 
@@ -397,6 +402,12 @@ status_t AUTO_tick( void )
   size_t          cmd_len;
 
   cmd_len = TOUCH_getAction( cmd_buf, sizeof( cmd_buf ) );
+  if( gMicOn &&  cmd_len == 0 )
+  {
+    cmd_len = MIC_getData( cmd_buf, sizeof( cmd_buf ) );
+    fprintf(stderr, ":: %d\n", cmd_len);
+  }
+
   bytes_received = jni_aa_cmd( cmd_len, (char*)cmd_buf, sizeof( res_buf ), (char*)res_buf );
 
   if( bytes_received < 0 )
@@ -405,15 +416,42 @@ status_t AUTO_tick( void )
     return UNKNOWN_ERROR;
   }
 
-  if( bytes_received > 0 )
+  if( bytes_received >= 0 && bytes_received <= 5 )
   {
-    if( res_buf[0] == 0x00 &&
-        res_buf[1] == 0x00 &&
-        res_buf[2] == 0x00 &&
-        res_buf[3] == 0x01 )
-      decodeHwFrame( res_buf, bytes_received );
-    else
-      decodeAudio( res_buf, bytes_received );
+    fprintf(stderr, "cmd: %d\n", bytes_received );
+  }
+
+  switch( bytes_received )
+  {
+    case 0:
+      break;
+
+    case 1:
+      gMicOn = false;
+      break;
+
+    case 2:
+      gMicOn = true;
+      break;
+
+    case 3:
+      break;
+
+    case 4:
+      break;
+
+    case 5:
+      break;
+
+    default:
+      if( res_buf[0] == 0x00 &&
+          res_buf[1] == 0x00 &&
+          res_buf[2] == 0x00 &&
+          res_buf[3] == 0x01 )
+        decodeHwFrame( res_buf, bytes_received );
+      else
+        decodeAudio( res_buf, bytes_received );
+      break;
   }
 
   gVBasedEventService->stopAndroidEvents();

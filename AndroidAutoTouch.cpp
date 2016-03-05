@@ -9,6 +9,7 @@
 #include "AndroidAutoTouch.h"
 
 //--------------------------------------------------------------------------
+#define AA_CH_TOUCH           3
 #define ACTION_DOWN           0
 #define ACTION_UP             1
 #define ACTION_MOVE           2
@@ -23,7 +24,7 @@ typedef struct
   int   Y;
 }TOUCH_EVENT;
 
-const uint8_t ba_touch[] = { 0x02, 0x0b, 0x03, 0x00, 0x80, 0x01,
+const uint8_t ba_touch[] = { AA_CH_TOUCH, 0x0b, 0x03, 0x00, 0x80, 0x01,
                              0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0, 0, 0,
                              0x1a, 0x0e,
                              0x0a, 0x08,
@@ -155,7 +156,7 @@ size_t TOUCH_getAction(uint8_t *buff, size_t buff_size)
 
   if(read(touchFd, &ev, sizeof(ev)) == sizeof(ev))
   {
-//    fprintf(stderr, "Event: %d, %d, %d\n", ev.type, ev.code, ev.value);
+    fprintf(stderr, "Event: %d, %d, %d\n", ev.type, ev.code, ev.value);
 
     switch(ev.type)
     {
