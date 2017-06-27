@@ -162,3 +162,65 @@ LOCAL_SHARED_LIBRARIES := \
         libssl
 
 include $(BUILD_EXECUTABLE)
+
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE      := aoap_streaming
+LOCAL_CFLAGS      := -Wno-return-type \
+                     -Wno-parentheses \
+                     -Wno-missing-braces \
+                     -Wno-sign-compare \
+                     -Wno-type-limits \
+                     -Wno-unused-parameter
+
+LOCAL_SRC_FILES:= \
+        main_aoap_streaming.cpp \
+        utils/Utils.cpp \
+        src/common.c \
+        src/os.c \
+        src/intercom/usbhost_hid.c \
+        services/aoap_service/IAOAPService.cpp \
+        services/aoap_service/IMediaControl.cpp \
+        services/aoap_service/AOAPService.cpp \
+        services/aoap_service/AOAPMediaControl.cpp
+
+
+LOCAL_C_INCLUDES += \
+        bionic \
+        bionic/libstdc++/include \
+        external/stlport/stlport \
+        external/tinyalsa/include \
+        external/libusb/libusb \
+        external/libusb \
+        $(LOCAL_PATH)/include \
+        $(LOCAL_PATH)/src \
+        $(LOCAL_PATH)/src/android_auto \
+        $(LOCAL_PATH)/utils \
+        system/vbased/uart-service \
+        system/vbased/common \
+        $(TOP)/frameworks/native/include/media/openmax
+
+LOCAL_STATIC_LIBRARIES := \
+        libcrypto \
+        libvbased \
+        libusbnok
+
+LOCAL_SHARED_LIBRARIES := \
+        libc \
+        libdl \
+        libcutils \
+        libutils \
+        libstlport \
+        libmedia \
+        libtinyalsa \
+        libmedia \
+        libbinder \
+        libgui \
+        libusbhost \
+        libui \
+        libstagefright_foundation \
+        libstagefright \
+        libssl
+
+include $(BUILD_EXECUTABLE)

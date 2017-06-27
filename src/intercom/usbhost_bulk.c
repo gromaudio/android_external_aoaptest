@@ -7,7 +7,9 @@
  *   Authors: Ivan Zaitsev <ivan.zaitsev@gmail.com>
  *
 ******************************************************************************/
+#define LOG_TAG "AOAP"
 
+#include "log/log.h"
 #include "common.h"
 #include "libusb/libusb.h"
 #include "intercom/usbhost_bulk.h"
@@ -45,14 +47,14 @@ signed char Bulk_DriveInsert( void )
     dev_handle = libusb_open_device_with_vid_pid(NULL, AOAP_VID, aSupportedPIDs[ i ]);
     if(dev_handle != NULL)
     {
-      fprintf(stderr,"Accessory device found(%04x:%04x).\n", AOAP_VID, aSupportedPIDs[ i ]);
+      ALOGE("Accessory device found(%04x:%04x).\n", AOAP_VID, aSupportedPIDs[ i ]);
       break;
     }
   }
 
   if(dev_handle == NULL)
   {
-    fprintf(stderr,"No accessory device found.\n");
+	  ALOGE("No accessory device found.\n");
     libusb_exit(NULL);
     return ERR_ENUM_FAILED;
   }
@@ -60,26 +62,26 @@ signed char Bulk_DriveInsert( void )
   r = libusb_get_configuration(dev_handle, &active_congif);
   if(r < 0)
   {
-    fprintf(stderr,"Get active configuration error: %d %s\n", r, libusb_error_name(r));
+	  ALOGE("Get active configuration error: %d %s\n", r, libusb_error_name(r));
     libusb_close(dev_handle);
     libusb_exit(NULL);
     return ERR_ENUM_FAILED;
   }
 
-  fprintf(stderr,"Active configuration: %d\n", active_congif);
+  ALOGE("Active configuration: %d\n", active_congif);
 
   if(1 == libusb_kernel_driver_active(dev_handle, AOAP_INTERFACE))
   {
-    fprintf(stderr,"Kernel driver active on interface %d.\n", AOAP_INTERFACE);
+	  ALOGE("Kernel driver active on interface %d.\n", AOAP_INTERFACE);
     r = libusb_detach_kernel_driver(dev_handle, AOAP_INTERFACE);
     if(r < 0)
-      fprintf(stderr,"Detach kernel driver error: %d %s\n", r, libusb_error_name(r));
+    	ALOGE("Detach kernel driver error: %d %s\n", r, libusb_error_name(r));
   }
 
   r = libusb_claim_interface(dev_handle, AOAP_INTERFACE);
   if(r < 0)
   {
-    fprintf(stderr,"Claim interface error: %d %s\n", r, libusb_error_name(r));
+	  ALOGE("Claim interface error: %d %s\n", r, libusb_error_name(r));
     libusb_close(dev_handle);
     libusb_exit(NULL);
     return ERR_ENUM_FAILED;
@@ -88,6 +90,7 @@ signed char Bulk_DriveInsert( void )
   if(OK != Bulk_OUT((volatile unsigned char*)pCapMsg,
                     3 + ReadBE16U( (unsigned char*)( pCapMsg + 1 ) )))
   {
+	  ALOGD("First Bulk_OUT error");
     libusb_release_interface(dev_handle, AOAP_INTERFACE);
     libusb_close(dev_handle);
     libusb_exit(NULL);
@@ -108,10 +111,10 @@ signed char Bulk_OUT( volatile unsigned char *aBuff, unsigned short iSize )
                            (unsigned char*)aBuff,
                            iSize,
                            &bytesTransfered,
-                           100);
+                           1000);
   if(r < 0 || (iSize != bytesTransfered))
   {
-    fprintf(stderr,"OUT error: %d %s\n", r, libusb_error_name(r));
+    ALOGD("OUT error: %d %s\n", r, libusb_error_name(r));
     return ERR_TD_FAIL;
   }
   return OK;
@@ -132,7 +135,7 @@ signed char Bulk_IN( volatile unsigned char *aBuff, unsigned short iSize, unsign
                            100);
   if(r < 0)
   {
-    fprintf(stderr,"IN error: %d %s\n", r, libusb_error_name(r));
+	ALOGD("IN error: %d %s\n", r, libusb_error_name(r));
     return ERR_TD_FAIL;
   }
   return OK;
