@@ -10,6 +10,12 @@
 
 #include <binder/IInterface.h>
 
+#ifdef TARGET_ANDROID_8
+  #define  dataWriteStrongBinder(cb)  data.writeStrongBinder(IInterface::asBinder(cb))
+#else
+  #define  dataWriteStrongBinder(cb)  data.writeStrongBinder((cb)->asBinder())
+#endif
+
 namespace android {
 
 

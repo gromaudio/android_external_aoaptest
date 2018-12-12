@@ -67,7 +67,8 @@ public:
     {
         Parcel data, reply;
         data.writeInterfaceToken( IMediaControl::getInterfaceDescriptor() );
-        data.writeStrongBinder(callback->asBinder());
+        //data.writeStrongBinder(callback->asBinder());
+        dataWriteStrongBinder(callback);
         remote()->transact( ADD_CALLBACK, data, &reply );
     }
 
@@ -75,7 +76,8 @@ public:
     {
         Parcel data, reply;
         data.writeInterfaceToken( IMediaControl::getInterfaceDescriptor() );
-        data.writeStrongBinder(callback->asBinder());
+        //data.writeStrongBinder(callback->asBinder());
+        dataWriteStrongBinder(callback);
         remote()->transact( REMOVE_CALLBACK, data, &reply );
     }
 

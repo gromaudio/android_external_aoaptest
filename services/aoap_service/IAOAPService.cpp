@@ -97,7 +97,7 @@ status_t BnAOAPService::onTransact( uint32_t code, const Parcel& data,
     case GET_CONTROL:
     {
       CHECK_INTERFACE( IAOAPService, data, reply );
-      reply->writeStrongBinder( getControl()->asBinder() );
+      reply->writeStrongBinder( platAsBinder( getControl() ) );
       return NO_ERROR;
     }break;
 

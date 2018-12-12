@@ -155,7 +155,8 @@ bool AOAPService::registerService(void)
 //-------------------------------------------------------------------------------------------------
 bool AOAPService::initBinder(void)
 {
-	ProcessState::self()->startThreadPool();
+    ProcessState::self()->startThreadPool();
+    return true;
 }
 
 }; //namespace android

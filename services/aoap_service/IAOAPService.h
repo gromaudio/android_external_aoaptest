@@ -11,6 +11,14 @@
 #include <binder/IInterface.h>
 #include "IMediaControl.h"
 
+#ifdef TARGET_ANDROID_8
+  #define  dataWriteStrongBinder(cb)  data.writeStrongBinder(IInterface::asBinder(cb))
+  #define  platAsBinder(cb) IInterface::asBinder(cb)
+#else
+  #define  dataWriteStrongBinder(cb)  data.writeStrongBinder((cb)->asBinder())
+  #define  platAsBinder(cb) (cb)->asBinder()
+#endif
+
 namespace android {
 
 enum {
